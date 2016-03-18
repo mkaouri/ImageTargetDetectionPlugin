@@ -4,7 +4,7 @@ This plugin allows the application to recognize trained NFT markers and see if t
 ## Install
 To install the plugin in your current Cordova project run
 ```
-cordova plugin add <git url>.git
+cordova plugin add https://github.com/Cloudoki/ARToolKitCordovaPlugin.git
 ```
 
 ### Android
