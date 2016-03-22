@@ -71,9 +71,15 @@
     </platform>
 
 
-    <!-- iOS
+    <!-- iOS -->
     <platform name="ios">
+      <config-file target="config.xml" parent="/*">
+        <feature name="ARToolKitPlugin">
+          <param name="ios-package" value="ARToolKitPlugin" />
+        </feature>
+      </config-file>
 
+      <header-file src="src/ios/ARToolKitPlugin.h" target-dir="ARToolKitPlugin" />
+      <source-file src="src/ios/ARToolKitPlugin.m" target-dir="ARToolKitPlugin" />
     </platform>
-    -->
 </plugin>
