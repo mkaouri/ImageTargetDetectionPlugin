@@ -4,7 +4,7 @@ This plugin allows the application to detect if an inputed image is visible or n
 ## Install
 To install the plugin in your current Cordova project run
 ```
-cordova plugin add https://github.com/Cloudoki/ARToolKitCordovaPlugin.git
+cordova plugin add https://github.com/Cloudoki/ImageDetectionCordovaPlugin.git
 ```
 
 ### Android
