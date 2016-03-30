@@ -1,8 +1,0 @@
-dependencies {
-    compile (name: 'arbaselib-release', ext: 'aar')
-}
-repositories {
-    flatDir{
-        dirs 'libs'
-    }
-}

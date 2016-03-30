@@ -1,5 +1,5 @@
-# ARToolKit Cordova Plugin (android & ios)
-This plugin allows the application to recognize trained NFT markers and see if they are detected or not in Cordova callback.
+# Image Detection Plugin (android & ios)
+This plugin allows the application to detect if an inputed image is visible or not by matching the images features with the device camera features using OpenCV.
 
 ## Install
 To install the plugin in your current Cordova project run
@@ -8,11 +8,8 @@ cordova plugin add https://github.com/Cloudoki/ARToolKitCordovaPlugin.git
 ```
 
 ### Android
-Change the config.xml and add to the platform android the following line
-```
-<preference name="android-minSdkVersion" value="15" />
-```
-This will set the  minimum API target to be 15 overwriting the ARToolKit library minimum of API 14.
+Work in progress...
 
 ### IOS
-Work in progress...
+#### Note
+The plugin aims to be used with iOS version >= 7.
