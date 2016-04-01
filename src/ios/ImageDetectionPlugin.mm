@@ -11,16 +11,14 @@ using namespace cv;
     Mat patt, desc1;
     vector<KeyPoint> kp1;
     bool debug, thread_over;
-    NSString * _commandID;
-    CDVPluginResult* pluginResult;
+    NSMutableArray *detection;
 }
 
 @end
 
 @implementation ImageDetectionPlugin
 
-@synthesize camera;
-@synthesize img;
+@synthesize camera, img;
 
 - (void)greet:(CDVInvokedUrlCommand*)command
 {
@@ -39,25 +37,21 @@ using namespace cv;
     }];
 }
 
--(void)init:(CDVInvokedUrlCommand*)command
+-(void)isDetecting:(CDVInvokedUrlCommand*)command
 {
     [self.commandDelegate runInBackground:^{
-        _commandID = command.callbackId.copy;
-        pluginResult = nil;
-        [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
-        NSString* pattern = [command.arguments objectAtIndex:0];
+        CDVPluginResult* plugin_result = nil;
         NSString* msg;
 
-        if (pattern != nil && [pattern length] > 0) {
-            [self setBase64Pattern: pattern];
-            msg = @"pattern selected";
-            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
+        if ([self getState]) {
+            msg = @"pattern detected";
+            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
         } else {
-            msg = @"a pattern must be set";
-            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
+            msg = @"pattern not detected";
+            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
         }
 
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:_commandID];
+        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
     }];
 }
 
@@ -92,7 +86,7 @@ using namespace cv;
 
     UIImage *image = [ImageUtils decodeBase64ToImage: image_base64];
     patt = [ImageUtils cvMatFromUIImage: image];
-    //cvtColor(patt, patt, CV_BGRA2GRAY);
+    cvtColor(patt, patt, CV_BGRA2GRAY);
     ORB orb;
     orb.detect(patt, kp1);
     orb.compute(patt, kp1, desc1);
@@ -133,6 +127,8 @@ using namespace cv;
     debug = false;
     thread_over = true;
 
+    detection = [[NSMutableArray alloc] init];
+
     [self.camera start];
     NSLog(@"----------- CAMERA STARTED ----------");
 }
@@ -161,16 +157,15 @@ using namespace cv;
     if(!image.empty() && !patt.empty())
     {
         Mat gray = image;
-        Mat image_copy = image;
+        //Mat image_copy = image;
         Mat desc2;
         vector<KeyPoint> kp2;
 
-        //cvtColor(image, gray, CV_BGRA2GRAY);
+        cvtColor(image, gray, CV_BGRA2GRAY);
 
         ORB orb;
         orb.detect(gray, kp2);
         orb.compute(gray, kp2, desc2);
-
 
         BFMatcher bf = BFMatcher::BFMatcher(NORM_HAMMING2, true);
         vector<DMatch> matches;
@@ -181,7 +176,7 @@ using namespace cv;
             bf.match(desc1, desc2, matches);
 
             int size = 0;
-            double min_dist = 100;
+            double min_dist = 1000;
             if(desc1.rows < matches.size())
                 size = desc1.rows;
             else
@@ -200,7 +195,7 @@ using namespace cv;
 
             for(int i = 0; i < size; i++)
             {
-                if(matches[i].distance <=  2*min_dist && good_matches.size() < 200)
+                if(matches[i].distance <=  2 * min_dist && good_matches.size() < 500)
                 {
                     good_matches.push_back(matches[i]);
                     if(i < 10 && debug)
@@ -210,13 +205,13 @@ using namespace cv;
                 }
             }
 
-            if(good_matches.size() >= 4)
+            if(good_matches.size() >= 8)
             {
                 if(debug)
                 {
                     Mat imageMatches;
                     drawMatches(patt, kp1, gray, kp2, good_matches_reduced, imageMatches, Scalar::all(-1), Scalar::all(-1), vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-                    image_copy = imageMatches;
+                    //image_copy = imageMatches;
                 }
 
                 Mat img_matches = image;
@@ -231,17 +226,32 @@ using namespace cv;
                     scene.push_back( kp2[ good_matches[i].trainIdx ].pt );
                 }
 
-                Mat H = findHomography( obj, scene, RANSAC );
-                const double det = H.at<double>(0, 0) * H.at<double>(1, 1) - H.at<double>(1, 0) * H.at<double>(0, 1);
+                Mat H = findHomography( obj, scene, CV_RANSAC);
 
-                if(det > 0.4)
+                bool result = true;
+
+                const double det = H.at<double>(0, 0) * H.at<double>(1, 1) - H.at<double>(1, 0) * H.at<double>(0, 1);
+                if (det < 0)
+                    result = false;
+
+                const double N1 = sqrt(H.at<double>(0, 0) * H.at<double>(0, 0) + H.at<double>(1, 0) * H.at<double>(1, 0));
+                if (N1 > 4 || N1 < 0.1)
+                    result =  false;
+
+                const double N2 = sqrt(H.at<double>(0, 1) * H.at<double>(0, 1) + H.at<double>(1, 1) * H.at<double>(1, 1));
+                if (N2 > 4 || N2 < 0.1)
+                    result = false;
+
+                const double N3 = sqrt(H.at<double>(2, 0) * H.at<double>(2, 0) + H.at<double>(2, 1) * H.at<double>(2, 1));
+                if (N3 > 0.002)
+                    result = false;
+
+                //NSLog(@"det %f, N1 %f, N2 %f, N3 %f, result %i", det, N1, N2, N3, result);
+
+                if(result)
                 {
-                    NSLog(@"detecting");
-                    [self.commandDelegate runInBackground:^{
-                        NSString *msg = @"pattern detected";
-                        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
-                        [self.commandDelegate sendPluginResult:pluginResult callbackId:_commandID];
-                    }];
+                    //NSLog(@"detecting");
+                    [self updateState: true];
 
                     if(debug)
                     {
@@ -259,15 +269,10 @@ using namespace cv;
                         line( img_matches, scene_corners[2] + Point2f( patt.cols, 0), scene_corners[3] + Point2f( patt.cols, 0), Scalar( 0, 255, 0), 4 );
                         line( img_matches, scene_corners[3] + Point2f( patt.cols, 0), scene_corners[0] + Point2f( patt.cols, 0), Scalar( 0, 255, 0), 4 );
 
-                        image_copy = img_matches;
+                        //image_copy = img_matches;
                     }
                 } else {
-                    NSLog(@"detecting");
-                    [self.commandDelegate runInBackground:^{
-                        NSString *msg = @"searching pattern";
-                        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
-                        [self.commandDelegate sendPluginResult:pluginResult callbackId:_commandID];
-                    }];
+                    [self updateState: false];
                 }
                 H.release();
                 img_matches.release();
@@ -284,4 +289,31 @@ using namespace cv;
 }
 #endif
 
+-(void)updateState:(BOOL) state
+{
+    if(detection.count > 15)
+    {
+        [detection removeObjectAtIndex:0];
+    }
+
+    if(state)
+    {
+        [detection addObject:[NSNumber numberWithBool:YES]];
+    } else {
+        [detection addObject:[NSNumber numberWithBool:NO]];
+    }
+}
+
+-(BOOL)getState
+{
+    NSNumber *total = 0;
+    for (NSNumber *states in detection){
+        total = [NSNumber numberWithInt:([total intValue] + [states intValue])];
+    }
+    if ([total intValue] >= 2) {
+        return true;
+    } else {
+        return false;
+    }
+}
 @end

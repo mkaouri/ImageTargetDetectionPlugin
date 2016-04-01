@@ -13,3 +13,30 @@ Work in progress...
 ### IOS
 #### Note
 The plugin aims to be used with iOS version >= 7.
+
+## Usage
+The plugin offers two functions `isDetecting` and `setPattern`.
+`isDetecting` callback on success function if detecting, on error function if it's not.
+`setPattern` sets the new pattern target to be detected. Calls on success if the pattern is set on error if no pattern set.
+ 
+## Usage example
+```javascript
+setInterval(function(){
+  ImageDetectionPlugin.isDetecting(function(success){console.log(success);}, function(error){console.log(error);});
+}, 1000);
+
+var img = new Image();
+img.crossOrigin = "Anonymous";
+img.onload = function () {
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
+  var dataURL;
+  canvas.height = this.height;
+  canvas.width = this.width;
+  ctx.drawImage(this, 0, 0);
+  dataURL = canvas.toDataURL("image/jpeg", 0.8);
+  ImageDetectionPlugin.setPattern(dataURL, function(success){console.log(success);}, function(error){console.log(error);});
+  canvas = null;
+};
+img.src = "img/patterns/coke.jpg";
+```
