@@ -16,14 +16,19 @@ The plugin aims to be used with iOS version >= 7.
 
 ## Usage
 The plugin offers two functions `isDetecting` and `setPattern`.
-`isDetecting` callback on success function if detecting, on error function if it's not.
-`setPattern` sets the new pattern target to be detected. Calls on success if the pattern is set on error if no pattern set.
- 
+`isDetecting` - the plugin will callback on success function if detecting the pattern or on error function if it's not.
+```javascript
+isDetecting(successCallback, errorCallback);
+```
+
+`setPattern` - sets the new pattern target to be detected. Calls on success if the pattern is set and on error if no pattern set. The input pattern must be a base64 image.
+```javascript
+setPattern(base64image, successCallback, errorCallback);
+```
+
 ## Usage example
 ```javascript
-setInterval(function(){
-  ImageDetectionPlugin.isDetecting(function(success){console.log(success);}, function(error){console.log(error);});
-}, 1000);
+ImageDetectionPlugin.isDetecting(function(success){console.log(success);}, function(error){console.log(error);});
 
 var img = new Image();
 img.crossOrigin = "Anonymous";

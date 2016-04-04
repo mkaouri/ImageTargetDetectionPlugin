@@ -10,8 +10,9 @@ using namespace cv;
 {
     Mat patt, desc1;
     vector<KeyPoint> kp1;
-    bool debug, thread_over;
+    bool debug, thread_over, called_success_detection, called_failed_detection;
     NSMutableArray *detection;
+    NSString *callbackID;
 }
 
 @end
@@ -39,20 +40,23 @@ using namespace cv;
 
 -(void)isDetecting:(CDVInvokedUrlCommand*)command
 {
-    [self.commandDelegate runInBackground:^{
-        CDVPluginResult* plugin_result = nil;
-        NSString* msg;
-
-        if ([self getState]) {
-            msg = @"pattern detected";
-            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
-        } else {
-            msg = @"pattern not detected";
-            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
-        }
-
-        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
-    }];
+    callbackID = command.callbackId;
+//    [self.commandDelegate runInBackground:^{
+//        CDVPluginResult* plugin_result = nil;
+//        NSString* msg;
+//
+//        if ([self getState]) {
+//            msg = @"pattern detected";
+//            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
+//            [plugin_result setKeepCallbackAsBool:YES];
+//        } else {
+//            msg = @"pattern not detected";
+//            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
+//            [plugin_result setKeepCallbackAsBool:YES];
+//        }
+//
+//        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
+//    }];
 }
 
 - (void)setPattern:(CDVInvokedUrlCommand*)command;
@@ -126,6 +130,8 @@ using namespace cv;
 
     debug = false;
     thread_over = true;
+    called_success_detection = false;
+    called_failed_detection = true;
 
     detection = [[NSMutableArray alloc] init];
 
@@ -291,7 +297,7 @@ using namespace cv;
 
 -(void)updateState:(BOOL) state
 {
-    if(detection.count > 15)
+    if(detection.count > 3)
     {
         [detection removeObjectAtIndex:0];
     }
@@ -301,6 +307,31 @@ using namespace cv;
         [detection addObject:[NSNumber numberWithBool:YES]];
     } else {
         [detection addObject:[NSNumber numberWithBool:NO]];
+    }
+
+    if([self getState] && called_failed_detection && !called_success_detection) {
+        [self.commandDelegate runInBackground:^{
+            CDVPluginResult* plugin_result = nil;
+            NSString* msg = @"pattern detected";
+            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
+            [plugin_result setKeepCallbackAsBool:YES];
+
+            [self.commandDelegate sendPluginResult:plugin_result callbackId:callbackID];
+        }];
+        called_success_detection = true;
+        called_failed_detection = false;
+    }
+    if(![self getState] && !called_failed_detection && called_success_detection) {
+        [self.commandDelegate runInBackground:^{
+            CDVPluginResult* plugin_result = nil;
+            NSString* msg = @"pattern not detected";
+            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
+            [plugin_result setKeepCallbackAsBool:YES];
+
+            [self.commandDelegate sendPluginResult:plugin_result callbackId:callbackID];
+        }];
+        called_success_detection = false;
+        called_failed_detection = true;
     }
 }
 
@@ -316,4 +347,5 @@ using namespace cv;
         return false;
     }
 }
+
 @end
