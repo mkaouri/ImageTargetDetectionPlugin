@@ -15,10 +15,21 @@ Work in progress...
 The plugin aims to be used with iOS version >= 7.
 
 ## Usage
-The plugin offers two functions `isDetecting` and `setPattern`.
+The plugin offers the functions `startProcessing`, `isDetecting` and `setPattern`.
+
+`startProcessing` - the plugin will process the video frames captured by the camera if the inputed argument is `true`, if the argument is `false` no frames will be processed. Calls on success if the argument is set and on error if no value set.
+**Note:** the plugins start with this option true.
+```javascript
+startProcessing(true or false, successCallback, errorCallback);
+```
+
 `isDetecting` - the plugin will callback on success function if detecting the pattern or on error function if it's not.
 ```javascript
 isDetecting(successCallback, errorCallback);
+```
+`setDetectionTimeout` - this function will set a timeout (**in seconds**) in which the processing of the frames will not occur. Calls on success if the argument is set and on error if no value set.
+```javascript
+setDetectionTimeout(timeout, successCallback, errorCallback);
 ```
 
 `setPattern` - sets the new pattern target to be detected. Calls on success if the pattern is set and on error if no pattern set. The input pattern must be a base64 image.
@@ -28,6 +39,8 @@ setPattern(base64image, successCallback, errorCallback);
 
 ## Usage example
 ```javascript
+ImageDetectionPlugin.startProcessing(true, function(success){console.log(success);}, function(error){console.log(error);});
+
 ImageDetectionPlugin.isDetecting(function(success){console.log(success);}, function(error){console.log(error);});
 
 var img = new Image();
@@ -44,4 +57,6 @@ img.onload = function () {
   canvas = null;
 };
 img.src = "img/patterns/coke.jpg";
+
+ImageDetectionPlugin.setDetectionTimeout(2, function(success){console.log(success);}, function(error){console.log(error);});
 ```

@@ -7,7 +7,6 @@
 {
     UIImageView *img;
     CvVideoCamera *camera;
-    CDVInvokedUrlCommand *_command;
 }
 
 @property (nonatomic, retain) CvVideoCamera *camera;
@@ -18,5 +17,9 @@
 - (void)isDetecting:(CDVInvokedUrlCommand*)command;
 
 - (void)setPattern:(CDVInvokedUrlCommand*)command;
+
+- (void)startProcessing:(CDVInvokedUrlCommand*)command;
+
+- (void)setDetectionTimeout:(CDVInvokedUrlCommand*)command;
 
 @end

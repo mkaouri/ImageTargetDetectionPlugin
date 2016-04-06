@@ -10,9 +10,11 @@ using namespace cv;
 {
     Mat patt, desc1;
     vector<KeyPoint> kp1;
-    bool debug, thread_over, called_success_detection, called_failed_detection;
+    bool processFrames, debug, thread_over, called_success_detection, called_failed_detection;
     NSMutableArray *detection;
     NSString *callbackID;
+    NSNumber *last_time;
+    float timeout;
 }
 
 @end
@@ -41,22 +43,22 @@ using namespace cv;
 -(void)isDetecting:(CDVInvokedUrlCommand*)command
 {
     callbackID = command.callbackId;
-//    [self.commandDelegate runInBackground:^{
-//        CDVPluginResult* plugin_result = nil;
-//        NSString* msg;
-//
-//        if ([self getState]) {
-//            msg = @"pattern detected";
-//            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
-//            [plugin_result setKeepCallbackAsBool:YES];
-//        } else {
-//            msg = @"pattern not detected";
-//            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
-//            [plugin_result setKeepCallbackAsBool:YES];
-//        }
-//
-//        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
-//    }];
+    //    [self.commandDelegate runInBackground:^{
+    //        CDVPluginResult* plugin_result = nil;
+    //        NSString* msg;
+    //
+    //        if ([self getState]) {
+    //            msg = @"pattern detected";
+    //            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
+    //            [plugin_result setKeepCallbackAsBool:YES];
+    //        } else {
+    //            msg = @"pattern not detected";
+    //            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
+    //            [plugin_result setKeepCallbackAsBool:YES];
+    //        }
+    //
+    //        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
+    //    }];
 }
 
 - (void)setPattern:(CDVInvokedUrlCommand*)command;
@@ -72,6 +74,51 @@ using namespace cv;
             plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
         } else {
             msg = @"a pattern must be set";
+            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
+        }
+
+        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
+    }];
+}
+
+- (void)startProcessing:(CDVInvokedUrlCommand*)command;
+{
+    [self.commandDelegate runInBackground:^{
+        CDVPluginResult* plugin_result = nil;
+        NSNumber* argVal = [command.arguments objectAtIndex:0];
+        NSString* msg;
+
+        if (argVal != nil) {
+            if ([argVal boolValue] == YES) {
+                processFrames = true;
+                msg = @"Frame processing set to 'true'";
+            } else {
+                processFrames = false;
+                msg = @"Frame processing set to 'false'";
+            }
+            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
+        } else {
+            msg = @"No value";
+            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
+        }
+
+        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
+    }];
+}
+
+- (void)setDetectionTimeout:(CDVInvokedUrlCommand*)command;
+{
+    [self.commandDelegate runInBackground:^{
+        CDVPluginResult* plugin_result = nil;
+        NSNumber* argVal = [command.arguments objectAtIndex:0];
+        NSString* msg;
+
+        if (argVal != nil && argVal > 0) {
+            timeout = [argVal floatValue];
+            msg = [NSString stringWithFormat:@"Processing timeout set to %@", argVal];
+            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
+        } else {
+            msg = @"No value or timeout value negative.";
             plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
         }
 
@@ -128,10 +175,15 @@ using namespace cv;
 
     self.camera.delegate = self;
 
+    processFrames = true;
     debug = false;
     thread_over = true;
     called_success_detection = false;
     called_failed_detection = true;
+
+    timeout = 0.0;
+    NSTimeInterval timeStamp = [[NSDate date] timeIntervalSince1970];
+    last_time = [NSNumber numberWithDouble: timeStamp];
 
     detection = [[NSMutableArray alloc] init];
 
@@ -143,16 +195,28 @@ using namespace cv;
 #ifdef __cplusplus
 - (void)processImage:(Mat &)image;
 {
-    // process each image in new thread
-    if(!image.empty() && thread_over){
-        thread_over = false;
-        Mat image_copy = image.clone();
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            [self backgroundImageProcessing: image_copy];
-            dispatch_sync(dispatch_get_main_queue(), ^{
-                thread_over = true;
+    //get current time and calculate time passed since last time update
+    NSTimeInterval timeStamp = [[NSDate date] timeIntervalSince1970];
+    NSNumber *current_time = [NSNumber numberWithDouble: timeStamp];
+    float time_passed = [current_time floatValue] - [last_time floatValue];
+    //NSLog(@"current_time - %@, last_time - %@", current_time, last_time);  && time_passed > timeout
+
+    //process frames if option is true and timeout passed
+    if (processFrames) {
+        // process each image in new thread
+        if(!image.empty() && thread_over){
+            thread_over = false;
+            Mat image_copy = image.clone();
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                [self backgroundImageProcessing: image_copy];
+                dispatch_sync(dispatch_get_main_queue(), ^{
+                    thread_over = true;
+                });
             });
-        });
+        }
+        //NSLog(@"time passed - %f, timeout - %f", time_passed, timeout);
+        //update time
+        last_time = current_time;
     }
 }
 #endif
