@@ -18,6 +18,7 @@ The plugin aims to be used with iOS version >= 7.
 The plugin offers the functions `startProcessing`, `isDetecting` and `setPattern`.
 
 `startProcessing` - the plugin will process the video frames captured by the camera if the inputed argument is `true`, if the argument is `false` no frames will be processed. Calls on success if the argument is set and on error if no value set.
+
 **Note:** the plugins start with this option true.
 ```javascript
 startProcessing(true or false, successCallback, errorCallback);

@@ -165,24 +165,25 @@ using namespace cv;
     [self.webView setOpaque: NO];
     // setup view to render the camera capture
     CGRect screenRect = [[UIScreen mainScreen] bounds];
-    CGRect rotatedBounds = CGRectMake(0.0f, 0.0f, screenRect.size.width, screenRect.size.height);
-    img = [[UIImageView alloc] initWithFrame: rotatedBounds];
-    img.transform = CGAffineTransformMakeRotation((-90 * M_PI) / 180);
-    CGRect rect = [img bounds];
-    rect.origin.x -= img.frame.origin.x;
-    rect.origin.y -= img.frame.origin.y;
-    [img setBounds:rect];
-    img.contentMode = UIViewContentModeScaleAspectFit;
+    //CGRect rotatedBounds = CGRectMake(0.0f, 0.0f, screenRect.size.width, screenRect.size.height);
+    img = [[UIImageView alloc] initWithFrame: screenRect];
+    //img.transform = CGAffineTransformMakeRotation((-90 * M_PI) / 180);
+    //CGRect rect = [img bounds];
+    //rect.origin.x -= img.frame.origin.x;
+    //rect.origin.y -= img.frame.origin.y;
+    //[img setBounds:rect];
+    img.contentMode = UIViewContentModeScaleAspectFill;
     [self.webView.superview addSubview: img];
     // set views order
     [self.webView.superview bringSubviewToFront: self.webView];
 
     //Camera
     self.camera = [[CvVideoCamera alloc] initWithParentView: img];
+    self.camera.useAVCaptureVideoPreviewLayer = YES;
     self.camera.defaultAVCaptureDevicePosition = AVCaptureDevicePositionBack;
     self.camera.defaultAVCaptureSessionPreset = AVCaptureSessionPresetMedium;
     self.camera.defaultAVCaptureVideoOrientation = AVCaptureVideoOrientationPortrait;
-    self.camera.defaultFPS = 30;
+    self.camera.defaultFPS = 24;
     self.camera.grayscaleMode = NO;
     //self.camera.rotateVideo = YES;
 
@@ -224,9 +225,10 @@ using namespace cv;
                 });
             });
         }
-        //NSLog(@"time passed - %f, timeout - %f", time_passed, timeout);
-        //update time
+
+        //update time and reset timeout
         last_time = current_time;
+        timeout = 0.0;
     }
 }
 #endif
@@ -371,7 +373,7 @@ using namespace cv;
 
 -(void)updateState:(BOOL) state
 {
-    if(detection.count > 3)
+    if(detection.count > 6)
     {
         [detection removeObjectAtIndex:0];
     }
@@ -415,7 +417,7 @@ using namespace cv;
     for (NSNumber *states in detection){
         total = [NSNumber numberWithInt:([total intValue] + [states intValue])];
     }
-    if ([total intValue] >= 2) {
+    if ([total intValue] >= 4) {
         return true;
     } else {
         return false;
