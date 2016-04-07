@@ -13,7 +13,7 @@ using namespace cv;
     bool processFrames, debug, thread_over, called_success_detection, called_failed_detection;
     NSMutableArray *detection;
     NSString *callbackID;
-    NSNumber *last_time;
+    NSDate *last_time;
     float timeout;
 }
 
@@ -89,7 +89,15 @@ using namespace cv;
         NSString* msg;
 
         if (argVal != nil) {
-            if ([argVal boolValue] == YES) {
+            BOOL argValBool;
+            @try {
+                argValBool = [argVal boolValue];
+            }
+            @catch (NSException *exception) {
+                argValBool = YES;
+                NSLog(@"%@", exception.reason);
+            }
+            if (argValBool == YES) {
                 processFrames = true;
                 msg = @"Frame processing set to 'true'";
             } else {
@@ -157,9 +165,14 @@ using namespace cv;
     [self.webView setOpaque: NO];
     // setup view to render the camera capture
     CGRect screenRect = [[UIScreen mainScreen] bounds];
-    img = [[UIImageView alloc] initWithFrame: screenRect];
-    img.contentMode = UIViewContentModeScaleAspectFill;
-    //img.transform = CGAffineTransformMakeRotation((-90 * M_PI) / 180);
+    CGRect rotatedBounds = CGRectMake(0.0f, 0.0f, screenRect.size.width, screenRect.size.height);
+    img = [[UIImageView alloc] initWithFrame: rotatedBounds];
+    img.transform = CGAffineTransformMakeRotation((-90 * M_PI) / 180);
+    CGRect rect = [img bounds];
+    rect.origin.x -= img.frame.origin.x;
+    rect.origin.y -= img.frame.origin.y;
+    [img setBounds:rect];
+    img.contentMode = UIViewContentModeScaleAspectFit;
     [self.webView.superview addSubview: img];
     // set views order
     [self.webView.superview bringSubviewToFront: self.webView];
@@ -171,7 +184,7 @@ using namespace cv;
     self.camera.defaultAVCaptureVideoOrientation = AVCaptureVideoOrientationPortrait;
     self.camera.defaultFPS = 30;
     self.camera.grayscaleMode = NO;
-    self.camera.rotateVideo = YES;
+    //self.camera.rotateVideo = YES;
 
     self.camera.delegate = self;
 
@@ -182,8 +195,7 @@ using namespace cv;
     called_failed_detection = true;
 
     timeout = 0.0;
-    NSTimeInterval timeStamp = [[NSDate date] timeIntervalSince1970];
-    last_time = [NSNumber numberWithDouble: timeStamp];
+    last_time = [NSDate date];
 
     detection = [[NSMutableArray alloc] init];
 
@@ -196,13 +208,11 @@ using namespace cv;
 - (void)processImage:(Mat &)image;
 {
     //get current time and calculate time passed since last time update
-    NSTimeInterval timeStamp = [[NSDate date] timeIntervalSince1970];
-    NSNumber *current_time = [NSNumber numberWithDouble: timeStamp];
-    float time_passed = [current_time floatValue] - [last_time floatValue];
-    //NSLog(@"current_time - %@, last_time - %@", current_time, last_time);  && time_passed > timeout
+    NSDate *current_time = [NSDate date];
+    NSTimeInterval time_passed = [current_time timeIntervalSinceDate:last_time];
 
     //process frames if option is true and timeout passed
-    if (processFrames) {
+    if (processFrames && time_passed > timeout) {
         // process each image in new thread
         if(!image.empty() && thread_over){
             thread_over = false;
