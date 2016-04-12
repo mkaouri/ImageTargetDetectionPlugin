@@ -26,11 +26,36 @@
     </js-module>
 
     <!-- Android -->
-    <!--
     <platform name="android">
+      <config-file target="res/xml/config.xml" parent="/*">
+         <feature name="ImageDetectionPlugin">
+           <param name="android-package" value="com.cloudoki.imagedetectionplugin.ImageDetectionPlugin"/>
+           <param name="onload" value="true" />
+         </feature>
+      </config-file>
+      <config-file parent="/manifest" target="AndroidManifest.xml">
+        <uses-sdk android:minSdkVersion="15" android:targetSdkVersion="23" />
+        <uses-permission android:name="android.permission.CAMERA" />
+        <uses-permission android:name="android.permission.INTERNET" />
+        <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+        <uses-permission android:name="android.permission.VIBRATE" />
+        <uses-feature android:name="android.hardware.camera.any" />
+        <uses-feature android:name="android.hardware.camera" android:required="true" />
+        <uses-feature android:name="android.hardware.camera.autofocus" android:required="true" />
+        <supports-screens
+            android:smallScreens="true"
+            android:normalScreens="true"
+            android:largeScreens="true"
+            android:xlargeScreens="true"
+            android:anyDensity="true" />
+      </config-file>
 
+      <framework src="com.android.support:support-v4:+" />
+      <framework src="com.android.support:appcompat-v7:+" />
+      <source-file src="src/android/libs/build-extras.gradle" target-dir="." />
+      <source-file src="src/android/libs/opencv-release.aar" target-dir="libs/" />
+      <source-file src="src/android/ImageDetectionPlugin.java" target-dir="src/com/cloudoki/imagedetectionplugin/" />
     </platform>
-    -->
 
     <!-- iOS -->
     <platform name="ios">

@@ -121,7 +121,7 @@ using namespace cv;
         NSNumber* argVal = [command.arguments objectAtIndex:0];
         NSString* msg;
 
-        if (argVal != nil && argVal > 0) {
+        if (argVal != nil && argVal >= 0) {
             timeout = [argVal floatValue];
             msg = [NSString stringWithFormat:@"Processing timeout set to %@", argVal];
             plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
