@@ -13,8 +13,8 @@ using namespace cv;
     bool processFrames, debug, thread_over, called_success_detection, called_failed_detection;
     NSMutableArray *detection;
     NSString *callbackID;
-    NSDate *last_time;
-    float timeout;
+    NSDate *last_time, *ease_last_time, *timeout_started;
+    float timeout, full_timeout, ease_time;
 }
 
 @end
@@ -121,8 +121,10 @@ using namespace cv;
         NSNumber* argVal = [command.arguments objectAtIndex:0];
         NSString* msg;
 
-        if (argVal != nil && argVal >= 0) {
+        if (argVal != nil && argVal > 0) {
             timeout = [argVal floatValue];
+            ease_time = 0.5;
+            timeout_started = [NSDate date];
             msg = [NSString stringWithFormat:@"Processing timeout set to %@", argVal];
             plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
         } else {
@@ -144,7 +146,14 @@ using namespace cv;
     }
 
     UIImage *image = [ImageUtils decodeBase64ToImage: image_base64];
-    patt = [ImageUtils cvMatFromUIImage: image];
+    UIImage *scaled = image;
+
+    // scale image to improve detection
+    if(image.size.width > 400) {
+        scaled = [UIImage imageWithCGImage:[image CGImage] scale:(image.size.width/400) orientation:(image.imageOrientation)];
+    }
+
+    patt = [ImageUtils cvMatFromUIImage: scaled];
     cvtColor(patt, patt, CV_BGRA2GRAY);
     ORB orb;
     orb.detect(patt, kp1);
@@ -183,7 +192,7 @@ using namespace cv;
     self.camera.defaultAVCaptureDevicePosition = AVCaptureDevicePositionBack;
     self.camera.defaultAVCaptureSessionPreset = AVCaptureSessionPresetMedium;
     self.camera.defaultAVCaptureVideoOrientation = AVCaptureVideoOrientationPortrait;
-    self.camera.defaultFPS = 24;
+    self.camera.defaultFPS = 30;
     self.camera.grayscaleMode = NO;
     //self.camera.rotateVideo = YES;
 
@@ -196,7 +205,11 @@ using namespace cv;
     called_failed_detection = true;
 
     timeout = 0.0;
+    full_timeout = 6.0;
+    ease_time = 0.0;
     last_time = [NSDate date];
+    timeout_started = last_time;
+    ease_last_time = last_time;
 
     detection = [[NSMutableArray alloc] init];
 
@@ -211,19 +224,31 @@ using namespace cv;
     //get current time and calculate time passed since last time update
     NSDate *current_time = [NSDate date];
     NSTimeInterval time_passed = [current_time timeIntervalSinceDate:last_time];
+    NSTimeInterval time_diff_passed = [current_time timeIntervalSinceDate:timeout_started];
+    NSTimeInterval passed_ease = [current_time timeIntervalSinceDate:ease_last_time];
+
+    //NSLog(@"time passed %f, time full %f, passed ease %f", time_passed, time_diff_passed, passed_ease);
 
     //process frames if option is true and timeout passed
     if (processFrames && time_passed > timeout) {
-        // process each image in new thread
-        if(!image.empty() && thread_over){
-            thread_over = false;
-            Mat image_copy = image.clone();
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                [self backgroundImageProcessing: image_copy];
-                dispatch_sync(dispatch_get_main_queue(), ^{
-                    thread_over = true;
+        //check if time passed full timout time
+        if(time_diff_passed > full_timeout) {
+            ease_time = 0.0;
+        }
+        // ease detection after timeout
+        if (passed_ease > ease_time) {
+            // process each image in new thread
+            if(!image.empty() && thread_over){
+                thread_over = false;
+                Mat image_copy = image.clone();
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    [self backgroundImageProcessing: image_copy];
+                    dispatch_sync(dispatch_get_main_queue(), ^{
+                        thread_over = true;
+                    });
                 });
-            });
+            }
+            ease_last_time = current_time;
         }
 
         //update time and reset timeout
@@ -417,7 +442,7 @@ using namespace cv;
     for (NSNumber *states in detection){
         total = [NSNumber numberWithInt:([total intValue] + [states intValue])];
     }
-    if ([total intValue] >= 4) {
+    if ([total intValue] >= 3) {
         return true;
     } else {
         return false;
