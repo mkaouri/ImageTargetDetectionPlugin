@@ -6,13 +6,13 @@ import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
-import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
 import android.hardware.Camera;
 import android.os.Build;
+import android.os.Environment;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.util.Base64;
@@ -55,6 +55,7 @@ import org.opencv.features2d.DescriptorMatcher;
 import org.opencv.features2d.FeatureDetector;
 import org.opencv.features2d.Features2d;
 import org.opencv.features2d.KeyPoint;
+import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
@@ -69,16 +70,11 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     private static final int CAMERA_ID_ANY   = -1;
     private static final int CAMERA_ID_BACK  = 99;
     private static final int CAMERA_ID_FRONT = 98;
-    private static final int MAX_UNSPECIFIED = -1;
 
     @SuppressWarnings("deprecation")
     private Camera               camera;
-    private int                  mMaxHeight;
-    private int                  mMaxWidth;
     private Activity             activity;
     private SurfaceHolder        surfaceHolder;
-    private View                 mainLayout;
-    private SurfaceView          surfaceView;
     private Mat                  mYuv;
     private Mat                  desc1;
     private Mat                  desc2;
@@ -92,13 +88,19 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     private Date                 last_time;
     private boolean processFrames = true, thread_over = true, debug = false,
             called_success_detection = false, called_failed_detection = true,
-            previewing = false;
+            previewing = false, save_files = false;
     private List<Integer> detection = new ArrayList<>();
     private double timeout = 0.0;
     private int cameraId = -1;
     private int mCameraIndex = CAMERA_ID_ANY;
 
     private BaseLoaderCallback mLoaderCallback;
+
+    private  int count = 0;
+    private String[] PERMISSIONS_STORAGE = {
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+    };
 
     @SuppressWarnings("deprecation")
     private static class JavaCameraSizeAccessor implements CameraBridgeViewBase.ListItemAccessor {
@@ -141,9 +143,6 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         activity.getWindow().setFormat(PixelFormat.TRANSLUCENT);
         activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-
-        mMaxWidth = MAX_UNSPECIFIED;
-        mMaxHeight = MAX_UNSPECIFIED;
 
         setCameraIndex(CAMERA_ID_BACK);
         openCamera();
@@ -215,7 +214,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             }
             if(argVal >= 0) {
                 timeout = argVal;
-                message = "Processing timeout set to ";// + timeout;
+                message = "Processing timeout set to " + timeout;
                 callbackContext.success(message);
             } else {
                 message = "No value or timeout value negative.";
@@ -240,7 +239,21 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                     REQUEST_CAMERA_PERMISSIONS);
         }
 
-        surfaceView = new SurfaceView(activity.getApplicationContext());
+        if(save_files) {
+            int permission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+
+            if (permission != PackageManager.PERMISSION_GRANTED) {
+                // We don't have permission so prompt the user
+                int REQUEST_EXTERNAL_STORAGE = 1;
+                ActivityCompat.requestPermissions(
+                        activity,
+                        PERMISSIONS_STORAGE,
+                        REQUEST_EXTERNAL_STORAGE
+                );
+            }
+        }
+
+        SurfaceView surfaceView = new SurfaceView(activity.getApplicationContext());
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -256,7 +269,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         surfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
 
 
-        mainLayout = webView.getView();
+        View mainLayout = webView.getView();
         mainLayout.setBackgroundColor(0x00000000);
         mainLayout.bringToFront();
 
@@ -312,14 +325,14 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     }
 
     @Override
-    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+    public void surfaceChanged(SurfaceHolder holder, int format, int height, int width) {
         if(previewing){
             camera.stopPreview();
             previewing = false;
         }
 
         if (camera != null){
-            boolean result = initializeCamera(width, height);
+            boolean result = initializeCamera(height, width);
             if( !result ) {
                 AlertDialog.Builder builder = new AlertDialog.Builder(activity);
                 builder.setTitle("An error occurred")
@@ -419,7 +432,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     }
 
     @SuppressWarnings("deprecation")
-    private boolean initializeCamera(int width, int height) {
+    private boolean initializeCamera(int height, int width) {
         Log.d(TAG, "Initialize java camera");
         boolean result = true;
         synchronized (this) {
@@ -434,7 +447,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
                 if (sizes != null) {
                     /* Select the size that fits surface considering maximum size allowed */
-                    Size frameSize = calculateCameraFrameSize(sizes, new JavaCameraSizeAccessor(), width, height);
+                    Size frameSize = calculateCameraFrameSize(sizes, new JavaCameraSizeAccessor(), height, width);
 
                     params.setPreviewFormat(ImageFormat.NV21);
                     Log.d(TAG, "Set preview size to " + frameSize.width + "x" + frameSize.height);
@@ -446,32 +459,18 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                     List<String> FocusModes = params.getSupportedFocusModes();
                     if (FocusModes != null && FocusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO))
                     {
+                        Log.d(TAG, "Set focus mode continuous video " + Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO );
                         params.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);
+                    }
+                    else if(FocusModes != null && FocusModes.contains(Camera.Parameters.FOCUS_MODE_AUTO)) {
+                        Log.d(TAG, "Set focus mode auto " + Camera.Parameters.FOCUS_MODE_AUTO );
+                        params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
                     }
 
                     if(activity != null) {
                         Camera.CameraInfo info = new Camera.CameraInfo();
                         Camera.getCameraInfo(cameraId, info);
                         int cameraRotationOffset = info.orientation;
-
-                        Camera.Parameters parameters = camera.getParameters();
-                        List<Camera.Size> previewSizes = parameters.getSupportedPreviewSizes();
-                        Camera.Size previewSize = null;
-                        float closestRatio = Float.MAX_VALUE;
-                        boolean isLandscape = activity.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
-
-                        int targetPreviewWidth = isLandscape ? surfaceView.getWidth() : surfaceView.getHeight();
-                        int targetPreviewHeight = isLandscape ? surfaceView.getHeight() : surfaceView.getWidth();
-                        float targetRatio = targetPreviewWidth / (float) targetPreviewHeight;
-
-                        Log.v(TAG, "target size: " + targetPreviewWidth + " / " + targetPreviewHeight + " ratio:" + targetRatio);
-                        for (Camera.Size candidateSize : previewSizes) {
-                            float whRatio = candidateSize.width / (float) candidateSize.height;
-                            if (previewSize == null || Math.abs(targetRatio - whRatio) < Math.abs(targetRatio - closestRatio)) {
-                                closestRatio = whRatio;
-                                previewSize = candidateSize;
-                            }
-                        }
 
                         int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
                         int degrees = 0;
@@ -511,12 +510,8 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
                         Log.v(TAG, "screenshot rotation: " + cameraRotationOffset + " / " + degrees + " = " + rotate);
 
-                        if (previewSize != null) {
-                            Log.v(TAG, "preview size: " + previewSize.width + " / " + previewSize.height);
-                            parameters.setPreviewSize(previewSize.width, previewSize.height);
-                        }
-                        parameters.setRotation(rotate);
-                        camera.setParameters(parameters);
+                        params.setRotation(rotate);
+                        camera.setParameters(params);
                         camera.setPreviewDisplay(surfaceHolder);
                         camera.setPreviewCallback(previewCallback);
                     }
@@ -536,18 +531,15 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         return result;
     }
 
-    private Size calculateCameraFrameSize(List<?> supportedSizes, CameraBridgeViewBase.ListItemAccessor accessor, int surfaceWidth, int surfaceHeight) {
+    private Size calculateCameraFrameSize(List<?> supportedSizes, CameraBridgeViewBase.ListItemAccessor accessor, int surfaceHeight, int surfaceWidth) {
         int calcWidth = 0;
         int calcHeight = 0;
-
-        int maxAllowedWidth = (mMaxWidth != MAX_UNSPECIFIED && mMaxWidth < surfaceWidth)? mMaxWidth : surfaceWidth;
-        int maxAllowedHeight = (mMaxHeight != MAX_UNSPECIFIED && mMaxHeight < surfaceHeight)? mMaxHeight : surfaceHeight;
 
         for (Object size : supportedSizes) {
             int width = accessor.getWidth(size);
             int height = accessor.getHeight(size);
 
-            if (width <= maxAllowedWidth && height <= maxAllowedHeight) {
+            if (width <= surfaceWidth && height <= surfaceHeight) {
                 if (width >= calcWidth && height >= calcHeight) {
                     calcWidth = width;
                     calcHeight = height;
@@ -571,7 +563,8 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                 if (thread_over) {
                     thread_over = false;
                     if (mYuv != null) mYuv.release();
-                    mYuv = new Mat(mainLayout.getHeight() + mainLayout.getHeight() / 2, mainLayout.getWidth(), CvType.CV_8UC1);
+                    Camera.Parameters params = camera.getParameters();
+                    mYuv = new Mat(params.getPreviewSize().height, params.getPreviewSize().width, CvType.CV_8UC1);
                     mYuv.put(0, 0, data);
                     processFrame();
                 }
@@ -586,49 +579,74 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     private void processFrame() {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
-                Mat rgba = new Mat(mainLayout.getHeight() + mainLayout.getHeight() / 2, mainLayout.getWidth(), CvType.CV_8UC1);
-
-                Imgproc.cvtColor(mYuv, rgba, Imgproc.COLOR_YUV420p2GRAY);
-
+                Mat gray = mYuv.submat(0, mYuv.rows(), 0, mYuv.cols()).t();
+                Core.flip(gray, gray, 1);
                 DescriptorMatcher matcherHamming = DescriptorMatcher.create(DescriptorMatcher.BRUTEFORCE_HAMMINGLUT);
 
-                orbDetector.detect(rgba, kp2);
-                orbDescriptor.compute(rgba, kp2, desc2);
+                if(save_files) {
+                    if (count % 10 == 0) {
+                        String extStorageDirectory = Environment.getExternalStorageDirectory().toString();
+                        Highgui.imwrite(extStorageDirectory + "/pic" + count + ".png", gray);
+                        Log.i("### FILE ###", "File saved to " + extStorageDirectory + "/pic" + count + ".png");
+                    }
+                    count++;
+                }
+
+                Imgproc.equalizeHist(gray, gray);
+
+                orbDetector.detect(gray, kp2);
+                orbDescriptor.compute(gray, kp2, desc2);
 
                 if (!desc1.empty() && !desc2.empty()) {
                     matcherHamming.match(desc1, desc2, matches);
 
                     List<DMatch> matchesList = matches.toList();
-                    double maxDistance = 0;
-                    double minDistance = 100;
-
-                    int rowCount = matchesList.size();
-                    for (int i = 0; i < rowCount; i++) {
-                        double dist = matchesList.get(i).distance;
-                        if (dist < minDistance) minDistance = dist;
-                        if (dist > maxDistance) maxDistance = dist;
-                    }
-
                     LinkedList<DMatch> good_matches = new LinkedList<>();
                     MatOfDMatch gm = new MatOfDMatch();
+
+                    double minDistance = 1000;
+
+                    int rowCount;
+
+                    if(desc1.rows() < matchesList.size())
+                        rowCount = desc1.rows();
+                    else
+                        rowCount = matchesList.size();
+
+                    for (int i = 0; i < rowCount; i++) {
+                        double dist = matchesList.get(i).distance;
+                        if (dist < minDistance) {
+                            minDistance = dist;
+                        }
+                    }
+
+                    LinkedList<DMatch> good_matches_reduced = new LinkedList<>();
+                    MatOfDMatch gmr = new MatOfDMatch();
                     double upperBound = 2 * minDistance;
                     for (int i = 0; i < rowCount; i++) {
-                        if (matchesList.get(i).distance < upperBound && good_matches.size() < 100) {
+                        if (matchesList.get(i).distance < upperBound && good_matches.size() < 500) {
                             good_matches.addLast(matchesList.get(i));
+                            if(i < 10 && debug)
+                            {
+                                good_matches_reduced.addLast(matchesList.get(i));
+                            }
                         }
                     }
                     gm.fromList(good_matches);
+                    if(debug) {
+                        gmr.fromList(good_matches_reduced);
+                    }
 
                     if (good_matches.size() >= 8) {
                         Mat img_matches = null;
                         if (debug) {
-                            img_matches = rgba.clone();
+                            img_matches = gray.clone();
                             Features2d.drawMatches(
                                     pattern,
                                     kp1,
-                                    rgba,
+                                    gray,
                                     kp2,
-                                    gm,
+                                    gmr,
                                     img_matches,
                                     new Scalar(255, 0, 0),
                                     new Scalar(0, 0, 255),
@@ -653,7 +671,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                         MatOfPoint2f scene = new MatOfPoint2f();
                         scene.fromList(sceneList);
 
-                        Mat H = Calib3d.findHomography(obj, scene);
+                        Mat H = Calib3d.findHomography(obj, scene, Calib3d.RANSAC, 5);
 
                         boolean result = true;
                         double det = H.get(0, 0)[0] * H.get(1, 1)[0] - H.get(1, 0)[0] * H.get(0, 1)[0];
@@ -676,11 +694,11 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                         }
 
                         if (debug) {
-                            Log.i("####### CENAS #######", det + " " + N1 + " " + N2 + " " + N3);
+                            Log.i("####### DEBUG #######", det + " " + N1 + " " + N2 + " " + N3);
                         }
 
                         if (result) {
-                            Log.i("####### TAG #######", "Detected stuff");
+                            Log.i("#### DETECTION ####", "Detected stuff");
                             updateState(true);
                             if (debug) {
                                 Mat obj_corners = new Mat(4, 1, CvType.CV_32FC2);
@@ -701,9 +719,10 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                         } else {
                             updateState(false);
                         }
+                        H.release();
                     }
                 }
-                rgba.release();
+                gray.release();
                 thread_over = true;
             }
         });
@@ -714,8 +733,24 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             image_base64 = image_base64.split(",")[1];
         byte[] decodedString = Base64.decode(image_base64, Base64.DEFAULT);
         Bitmap bitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
-        Utils.bitmapToMat(bitmap, pattern);
+        Bitmap scaled = bitmap;
+        if (bitmap.getWidth() > 400) {
+            double scale = bitmap.getWidth() / 400;
+            scaled = Bitmap.createScaledBitmap(bitmap, (int) (bitmap.getWidth()/scale), (int) (bitmap.getHeight()/scale), true);
+        }
+        Utils.bitmapToMat(scaled, pattern);
         Imgproc.cvtColor(pattern, pattern, Imgproc.COLOR_BGR2GRAY);
+        Imgproc.equalizeHist(pattern, pattern);
+
+        if(save_files) {
+            Bitmap bmp = scaled;
+            Utils.matToBitmap(pattern, bmp);
+            String extStorageDirectory = Environment.getExternalStorageDirectory().toString();
+            int num = (int) (Math.random() * 10001);
+            Highgui.imwrite(extStorageDirectory + "/pic" + num + ".png", pattern);
+            Log.i("### FILE ###", "File saved to " + extStorageDirectory + "/pic" + num + ".png");
+        }
+
         orbDetector.detect(pattern, kp1);
         orbDescriptor.compute(pattern, kp1, desc1);
     }
@@ -761,8 +796,10 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             total += intValue;
         }
 
-        Log.i("## GET STATE RESULT ##", " state -> " + total);
+        if(debug) {
+            Log.i("## GET STATE RESULT ##", " state -> " + total);
+        }
 
-        return total >= 4;
+        return total >= 3;
     }
 }

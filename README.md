@@ -8,7 +8,8 @@ cordova plugin add https://github.com/Cloudoki/ImageDetectionCordovaPlugin.git
 ```
 
 ### Android
-Work in progress...
+#### Note
+The plugin aims to be used with Android API >= 16 (4.1 Jelly Bean).
 
 ### IOS
 #### Note
