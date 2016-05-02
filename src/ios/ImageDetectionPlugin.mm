@@ -10,7 +10,7 @@ using namespace cv;
 {
     Mat patt, desc1;
     vector<KeyPoint> kp1;
-    bool processFrames, debug, thread_over, called_success_detection, called_failed_detection;
+    bool processFrames, debug, save_files, thread_over, called_success_detection, called_failed_detection;
     NSMutableArray *detection;
     NSString *callbackID;
     NSDate *last_time, *ease_last_time, *timeout_started;
@@ -43,22 +43,6 @@ using namespace cv;
 -(void)isDetecting:(CDVInvokedUrlCommand*)command
 {
     callbackID = command.callbackId;
-    //    [self.commandDelegate runInBackground:^{
-    //        CDVPluginResult* plugin_result = nil;
-    //        NSString* msg;
-    //
-    //        if ([self getState]) {
-    //            msg = @"pattern detected";
-    //            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
-    //            [plugin_result setKeepCallbackAsBool:YES];
-    //        } else {
-    //            msg = @"pattern not detected";
-    //            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
-    //            [plugin_result setKeepCallbackAsBool:YES];
-    //        }
-    //
-    //        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
-    //    }];
 }
 
 - (void)setPattern:(CDVInvokedUrlCommand*)command;
@@ -145,16 +129,29 @@ using namespace cv;
         image_base64 = lines[1];
     }
 
+    int width_limit = 400;
+
     UIImage *image = [ImageUtils decodeBase64ToImage: image_base64];
     UIImage *scaled = image;
 
     // scale image to improve detection
-    if(image.size.width > 400) {
-        scaled = [UIImage imageWithCGImage:[image CGImage] scale:(image.size.width/400) orientation:(image.imageOrientation)];
+    //NSLog(@"SCALE BEFORE %f", (scaled.size.width));
+    if(image.size.width > width_limit) {
+        scaled = [UIImage imageWithCGImage:[image CGImage] scale:(image.size.width/width_limit) orientation:(image.imageOrientation)];
     }
+    //NSLog(@"SCALE AFTER %f", (scaled.size.width));
+
+    patt = [ImageUtils cvMatFromUIImage: scaled];
 
     patt = [ImageUtils cvMatFromUIImage: scaled];
     cvtColor(patt, patt, CV_BGRA2GRAY);
+    equalizeHist(patt, patt);
+
+    //save mat as image
+    if (save_files)
+    {
+        UIImageWriteToSavedPhotosAlbum([ImageUtils UIImageFromCVMat:patt], nil, nil, nil);
+    }
     ORB orb;
     orb.detect(patt, kp1);
     orb.compute(patt, kp1, desc1);
@@ -174,13 +171,7 @@ using namespace cv;
     [self.webView setOpaque: NO];
     // setup view to render the camera capture
     CGRect screenRect = [[UIScreen mainScreen] bounds];
-    //CGRect rotatedBounds = CGRectMake(0.0f, 0.0f, screenRect.size.width, screenRect.size.height);
     img = [[UIImageView alloc] initWithFrame: screenRect];
-    //img.transform = CGAffineTransformMakeRotation((-90 * M_PI) / 180);
-    //CGRect rect = [img bounds];
-    //rect.origin.x -= img.frame.origin.x;
-    //rect.origin.y -= img.frame.origin.y;
-    //[img setBounds:rect];
     img.contentMode = UIViewContentModeScaleAspectFill;
     [self.webView.superview addSubview: img];
     // set views order
@@ -194,12 +185,12 @@ using namespace cv;
     self.camera.defaultAVCaptureVideoOrientation = AVCaptureVideoOrientationPortrait;
     self.camera.defaultFPS = 30;
     self.camera.grayscaleMode = NO;
-    //self.camera.rotateVideo = YES;
 
     self.camera.delegate = self;
 
     processFrames = true;
     debug = false;
+    save_files = false;
     thread_over = true;
     called_success_detection = false;
     called_failed_detection = true;
@@ -269,6 +260,7 @@ using namespace cv;
         vector<KeyPoint> kp2;
 
         cvtColor(image, gray, CV_BGRA2GRAY);
+        equalizeHist(gray, gray);
 
         ORB orb;
         orb.detect(gray, kp2);
@@ -359,7 +351,10 @@ using namespace cv;
                 {
                     //NSLog(@"detecting");
                     [self updateState: true];
-
+                    if(save_files)
+                    {
+                        UIImageWriteToSavedPhotosAlbum([ImageUtils UIImageFromCVMat:gray], nil, nil, nil);
+                    }
                     if(debug)
                     {
                         //-- Get the corners from the image_1 ( the object to be "detected" )
@@ -398,8 +393,11 @@ using namespace cv;
 
 -(void)updateState:(BOOL) state
 {
-    if(detection.count > 6)
+    int detection_limit = 6;
+
+    if(detection.count > detection_limit)
     {
+
         [detection removeObjectAtIndex:0];
     }
 
@@ -438,11 +436,13 @@ using namespace cv;
 
 -(BOOL)getState
 {
+    int detection_thresh = 3;
     NSNumber *total = 0;
+
     for (NSNumber *states in detection){
         total = [NSNumber numberWithInt:([total intValue] + [states intValue])];
     }
-    if ([total intValue] >= 3) {
+    if ([total intValue] >= detection_thresh) {
         return true;
     } else {
         return false;
