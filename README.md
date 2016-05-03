@@ -1,5 +1,8 @@
 # Image Detection Plugin (android & ios)
-This plugin allows the application to detect if an inputed image is visible or not by matching the images features with the device camera features using OpenCV.
+This plugin allows the application to detect if an inputed image target is visible, or not, by matching the image features with the device camera features using [OpenCV](http://opencv.org/). It also presents the device camera preview in the background.
+
+### Note
+The plugin is aimed to work in **portrait mode**, should also work in landscape but no guarantees.
 
 ## Install
 To install the plugin in your current Cordova project run
@@ -8,12 +11,22 @@ cordova plugin add https://github.com/Cloudoki/ImageDetectionCordovaPlugin.git
 ```
 
 ### Android
-#### Note
 The plugin aims to be used with Android API >= 16 (4.1 Jelly Bean).
 
 ### IOS
-#### Note
 The plugin aims to be used with iOS version >= 7.
+
+### Note
+In *config.xml* add Android and iOS target preference
+```javascript
+<platform name="android">
+    <preference name="android-minSdkVersion" value="16" />
+</platform>
+<platform name="ios">
+    <preference name="target-device" value="handset"/>
+    <preference name="deployment-target" value="7.0"/>
+</platform>
+```
 
 ## Usage
 The plugin offers the functions `startProcessing`, `isDetecting` and `setPattern`.
@@ -58,7 +71,7 @@ img.onload = function () {
   ImageDetectionPlugin.setPattern(dataURL, function(success){console.log(success);}, function(error){console.log(error);});
   canvas = null;
 };
-img.src = "img/patterns/coke.jpg";
+img.src = "img/patterns/target.jpg";
 
 ImageDetectionPlugin.setDetectionTimeout(2, function(success){console.log(success);}, function(error){console.log(error);});
 ```
