@@ -129,7 +129,7 @@ using namespace cv;
         image_base64 = lines[1];
     }
 
-    int width_limit = 400;
+    int width_limit = 400, height_limit = 400;
 
     UIImage *image = [ImageUtils decodeBase64ToImage: image_base64];
     UIImage *scaled = image;
@@ -138,6 +138,9 @@ using namespace cv;
     //NSLog(@"SCALE BEFORE %f", (scaled.size.width));
     if(image.size.width > width_limit) {
         scaled = [UIImage imageWithCGImage:[image CGImage] scale:(image.size.width/width_limit) orientation:(image.imageOrientation)];
+        if(scaled.size.height > height_limit) {
+            scaled = [UIImage imageWithCGImage:[scaled CGImage] scale:(scaled.size.height/height_limit) orientation:(scaled.imageOrientation)];
+        }
     }
     //NSLog(@"SCALE AFTER %f", (scaled.size.width));
 
@@ -145,7 +148,7 @@ using namespace cv;
 
     patt = [ImageUtils cvMatFromUIImage: scaled];
     cvtColor(patt, patt, CV_BGRA2GRAY);
-    equalizeHist(patt, patt);
+    //equalizeHist(patt, patt);
 
     //save mat as image
     if (save_files)
@@ -260,7 +263,7 @@ using namespace cv;
         vector<KeyPoint> kp2;
 
         cvtColor(image, gray, CV_BGRA2GRAY);
-        equalizeHist(gray, gray);
+        //equalizeHist(gray, gray);
 
         ORB orb;
         orb.detect(gray, kp2);
