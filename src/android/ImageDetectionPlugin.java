@@ -300,6 +300,9 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             Log.d(TAG, "OpenCV library found inside package. Using it!");
             mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
         }
+        if (camera == null) {
+            openCamera();
+        }
     }
 
     @Override
@@ -511,6 +514,9 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                         Log.v(TAG, "screenshot rotation: " + cameraRotationOffset + " / " + degrees + " = " + rotate);
 
                         params.setRotation(rotate);
+
+                        params.setPreviewFrameRate(24);// set camera preview
+
                         camera.setParameters(params);
                         camera.setPreviewDisplay(surfaceHolder);
                         camera.setPreviewCallback(previewCallback);
@@ -592,7 +598,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                     count++;
                 }
 
-                Imgproc.equalizeHist(gray, gray);
+                //Imgproc.equalizeHist(gray, gray);
 
                 orbDetector.detect(gray, kp2);
                 orbDescriptor.compute(gray, kp2, desc2);
@@ -729,18 +735,23 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     }
 
     private void setBase64Pattern(String image_base64) {
+        int limit = 400;
         if(image_base64.contains("data:"))
             image_base64 = image_base64.split(",")[1];
         byte[] decodedString = Base64.decode(image_base64, Base64.DEFAULT);
         Bitmap bitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
         Bitmap scaled = bitmap;
-        if (bitmap.getWidth() > 400) {
-            double scale = bitmap.getWidth() / 400;
+        if (bitmap.getWidth() > limit) {
+            double scale = bitmap.getWidth() / limit;
             scaled = Bitmap.createScaledBitmap(bitmap, (int) (bitmap.getWidth()/scale), (int) (bitmap.getHeight()/scale), true);
+            if (bitmap.getHeight() > limit) {
+                scale = bitmap.getHeight() / limit;
+                scaled = Bitmap.createScaledBitmap(bitmap, (int) (bitmap.getWidth()/scale), (int) (bitmap.getHeight()/scale), true);
+            }
         }
         Utils.bitmapToMat(scaled, pattern);
         Imgproc.cvtColor(pattern, pattern, Imgproc.COLOR_BGR2GRAY);
-        Imgproc.equalizeHist(pattern, pattern);
+        //Imgproc.equalizeHist(pattern, pattern);
 
         if(save_files) {
             Bitmap bmp = scaled;
