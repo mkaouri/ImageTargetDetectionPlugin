@@ -8,6 +8,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
 import android.hardware.Camera;
@@ -24,6 +25,7 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.webkit.WebView;
 import android.widget.FrameLayout;
 
 import org.apache.cordova.CallbackContext;
@@ -262,7 +264,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
         activity.addContentView(surfaceView, params);
 
-        activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         surfaceHolder = surfaceView.getHolder();
         surfaceHolder.addCallback(this);
@@ -270,7 +272,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
 
         View mainLayout = webView.getView();
-        mainLayout.setBackgroundColor(0x00000000);
+        mainLayout.setBackgroundColor(Color.TRANSPARENT);
         mainLayout.bringToFront();
 
         thread_over = true;
