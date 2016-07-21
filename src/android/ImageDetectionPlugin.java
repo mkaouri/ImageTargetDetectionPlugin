@@ -8,7 +8,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Color;
 import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
 import android.hardware.Camera;
@@ -97,6 +96,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     private int mCameraIndex = CAMERA_ID_ANY;
 
     private BaseLoaderCallback mLoaderCallback;
+    private FrameLayout cameraFrameLayout;
 
     private  int count = 0;
     private String[] PERMISSIONS_STORAGE = {
@@ -120,6 +120,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         }
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void initialize(CordovaInterface cordova, CordovaWebView webView) {
         activity = cordova.getActivity();
@@ -146,13 +147,34 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
+        SurfaceView surfaceView = new SurfaceView(activity.getApplicationContext());
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER);
+
+        cameraFrameLayout = new FrameLayout(activity.getApplicationContext());
+
+        cameraFrameLayout.addView(surfaceView);
+
+        activity.getWindow().addContentView(cameraFrameLayout, params);
+
+        surfaceHolder = surfaceView.getHolder();
+        surfaceHolder.addCallback(this);
+
+        sendViewToBack(cameraFrameLayout);
+
         setCameraIndex(CAMERA_ID_BACK);
         openCamera();
+
+        cameraFrameLayout.setVisibility(View.INVISIBLE);
     }
 
     @Override
     public boolean execute(String action, JSONArray data,
                            CallbackContext callbackContext) throws JSONException {
+
         if (action.equals("greet")) {
             Log.i(TAG, "greet called");
             String name = data.getString(0);
@@ -227,7 +249,6 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         return false;
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public void onStart()
     {
@@ -255,32 +276,28 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             }
         }
 
-        SurfaceView surfaceView = new SurfaceView(activity.getApplicationContext());
-
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                Gravity.CENTER);
-
-        activity.addContentView(surfaceView, params);
-
-        // activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        surfaceHolder = surfaceView.getHolder();
-        surfaceHolder.addCallback(this);
-        surfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-
-
-        View mainLayout = webView.getView();
-        mainLayout.setBackgroundColor(Color.TRANSPARENT);
-        mainLayout.bringToFront();
-
         thread_over = true;
         debug = false;
         called_success_detection = false;
         called_failed_detection = true;
 
         last_time = new Date();
+
+        new android.os.Handler().postDelayed(
+            new Runnable() {
+                public void run() {
+                    cameraFrameLayout.setVisibility(View.VISIBLE);
+                    cameraFrameLayout.invalidate();
+                }
+            }, 2000);
+    }
+
+    public static void sendViewToBack(final View child) {
+        final ViewGroup parent = (ViewGroup)child.getParent();
+        if (null != parent) {
+            parent.removeView(child);
+            parent.addView(child, 0);
+        }
     }
 
     private boolean checkCameraPermission() {
