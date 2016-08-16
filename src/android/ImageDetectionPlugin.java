@@ -701,7 +701,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
                         double det = 0, N1 = 0, N2 = 0, N3 = 0;
 
-                        if (H != null) {
+                        if (!H.empty()) {
                             double[] p1 = H.get(0, 0);
                             double[] p2 = H.get(1, 1);
                             double[] p3 = H.get(1, 0);
@@ -774,9 +774,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                         } else {
                             updateState(false);
                         }
-                        if (H != null) {
-                            H.release();
-                        }
+                        H.release();
                     }
                 }
                 gray.release();
