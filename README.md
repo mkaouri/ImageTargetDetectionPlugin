@@ -11,10 +11,11 @@ cordova plugin add https://github.com/Cloudoki/ImageDetectionCordovaPlugin.git
 ```
 
 ### Android
-The plugin aims to be used with Android API >= 16 (4.1 Jelly Bean).
+- The plugin aims to be used with Android API >= 16 (4.1 Jelly Bean).
 
 ### IOS
-The plugin aims to be used with iOS version >= 7.
+- The plugin aims to be used with iOS version >= 7.
+- **Important!** Go into src/ios folder and extract opencv2.framework from the zip file into the same folder.
 
 ### Note
 In *config.xml* add Android and iOS target preference
@@ -26,6 +27,11 @@ In *config.xml* add Android and iOS target preference
     <preference name="target-device" value="handset"/>
     <preference name="deployment-target" value="7.0"/>
 </platform>
+```
+And don't forget to set the background to be transparent or the preview may not shown up.
+Again in *config.xml* add the following preference.
+```javascript
+<preference name="backgroundColor" value="0x00000000" />
 ```
 
 ## Usage

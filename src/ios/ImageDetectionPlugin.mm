@@ -1,15 +1,14 @@
 #import "ImageDetectionPlugin.h"
 #import "ImageUtils.h"
-#import <opencv2/highgui/ios.h>
+#import <opencv2/imgcodecs/ios.h>
 #import <opencv2/features2d/features2d.hpp>
-#import <opencv2/nonfree/nonfree.hpp>
 
 using namespace cv;
 
 @interface ImageDetectionPlugin()
 {
     Mat patt, desc1;
-    vector<KeyPoint> kp1;
+    std::vector<KeyPoint> kp1;
     bool processFrames, debug, save_files, thread_over, called_success_detection, called_failed_detection;
     NSMutableArray *detection;
     NSString *callbackID;
@@ -155,9 +154,9 @@ using namespace cv;
     {
         UIImageWriteToSavedPhotosAlbum([ImageUtils UIImageFromCVMat:patt], nil, nil, nil);
     }
-    ORB orb;
-    orb.detect(patt, kp1);
-    orb.compute(patt, kp1, desc1);
+    Ptr<ORB> orb = ORB::create();
+    orb->detect(patt, kp1);
+    orb->compute(patt, kp1, desc1);
 }
 
 - (void)pluginInitialize {
@@ -209,6 +208,7 @@ using namespace cv;
 
     [self.camera start];
     NSLog(@"----------- CAMERA STARTED ----------");
+    NSLog(@"----------- CV_VERSION %s ----------", CV_VERSION);
 }
 
 #pragma mark - Protocol CvVideoCameraDelegate
@@ -260,18 +260,18 @@ using namespace cv;
         Mat gray = image;
         //Mat image_copy = image;
         Mat desc2;
-        vector<KeyPoint> kp2;
+        std::vector<KeyPoint> kp2;
 
         cvtColor(image, gray, CV_BGRA2GRAY);
         //equalizeHist(gray, gray);
 
-        ORB orb;
-        orb.detect(gray, kp2);
-        orb.compute(gray, kp2, desc2);
+        Ptr<ORB> orb = ORB::create();
+        orb->detect(gray, kp2);
+        orb->compute(gray, kp2, desc2);
 
         BFMatcher bf = BFMatcher::BFMatcher(NORM_HAMMING2, true);
-        vector<DMatch> matches;
-        vector<DMatch> good_matches;
+        std::vector<DMatch> matches;
+        std::vector<DMatch> good_matches;
 
         if(!desc1.empty() && !desc2.empty())
         {
@@ -293,7 +293,7 @@ using namespace cv;
                 }
             }
 
-            vector<DMatch> good_matches_reduced;
+            std::vector<DMatch> good_matches_reduced;
 
             for(int i = 0; i < size; i++)
             {
@@ -312,14 +312,14 @@ using namespace cv;
                 if(debug)
                 {
                     Mat imageMatches;
-                    drawMatches(patt, kp1, gray, kp2, good_matches_reduced, imageMatches, Scalar::all(-1), Scalar::all(-1), vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+                    drawMatches(patt, kp1, gray, kp2, good_matches_reduced, imageMatches, Scalar::all(-1), Scalar::all(-1), std::vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
                     //image_copy = imageMatches;
                 }
 
                 Mat img_matches = image;
                 //-- Localize the object
-                vector<Point2f> obj;
-                vector<Point2f> scene;
+                std::vector<Point2f> obj;
+                std::vector<Point2f> scene;
 
                 for( int i = 0; i < good_matches.size(); i++ )
                 {
@@ -332,23 +332,51 @@ using namespace cv;
 
                 bool result = true;
 
-                const double det = H.at<double>(0, 0) * H.at<double>(1, 1) - H.at<double>(1, 0) * H.at<double>(0, 1);
-                if (det < 0)
+                if (!H.empty()) {
+                    const double p1 = H.at<double>(0, 0);
+                    const double p2 = H.at<double>(1, 1);
+                    const double p3 = H.at<double>(1, 0);
+                    const double p4 = H.at<double>(0, 1);
+                    const double p5 = H.at<double>(2, 0);
+                    const double p6 = H.at<double>(2, 1);
+                    double det = 0, N1 = 0, N2 = 0, N3 = 0;
+
+                    if (p1 && p2 && p3 && p4) {
+                        det = p1 * p2 - p3 * p4;
+                        if (det < 0)
+                            result = false;
+                    } else {
+                        result = false;
+                    }
+
+                    if (p1 && p3) {
+                        N1 = sqrt(p1 * p1 + p3 * p3);
+                        if (N1 > 4 || N1 < 0.1)
+                            result =  false;
+                    } else {
+                        result = false;
+                    }
+
+                    if (p2 && p4) {
+                        N2 = sqrt(p4 * p4 + p2 * p2);
+                        if (N2 > 4 || N2 < 0.1)
+                            result = false;
+                    } else {
+                        result = false;
+                    }
+
+                    if (p5 && p6) {
+                    N3 = sqrt(p5 * p5 + p6 * p6);
+                    if (N3 > 0.002)
+                        result = false;
+                    } else {
+                        result = false;
+                    }
+
+                    //NSLog(@"det %f, N1 %f, N2 %f, N3 %f, result %i", det, N1, N2, N3, result);
+                } else {
                     result = false;
-
-                const double N1 = sqrt(H.at<double>(0, 0) * H.at<double>(0, 0) + H.at<double>(1, 0) * H.at<double>(1, 0));
-                if (N1 > 4 || N1 < 0.1)
-                    result =  false;
-
-                const double N2 = sqrt(H.at<double>(0, 1) * H.at<double>(0, 1) + H.at<double>(1, 1) * H.at<double>(1, 1));
-                if (N2 > 4 || N2 < 0.1)
-                    result = false;
-
-                const double N3 = sqrt(H.at<double>(2, 0) * H.at<double>(2, 0) + H.at<double>(2, 1) * H.at<double>(2, 1));
-                if (N3 > 0.002)
-                    result = false;
-
-                //NSLog(@"det %f, N1 %f, N2 %f, N3 %f, result %i", det, N1, N2, N3, result);
+                }
 
                 if(result)
                 {
@@ -361,10 +389,10 @@ using namespace cv;
                     if(debug)
                     {
                         //-- Get the corners from the image_1 ( the object to be "detected" )
-                        vector<Point2f> obj_corners(4);
+                        std::vector<Point2f> obj_corners(4);
                         obj_corners[0] = cvPoint(0,0); obj_corners[1] = cvPoint( patt.cols, 0 );
                         obj_corners[2] = cvPoint( patt.cols, patt.rows ); obj_corners[3] = cvPoint( 0, patt.rows );
-                        vector<Point2f> scene_corners(4);
+                        std::vector<Point2f> scene_corners(4);
 
                         perspectiveTransform( obj_corners, scene_corners, H);
 
