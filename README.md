@@ -1,5 +1,5 @@
 # Image Detection Plugin (android & ios)
-This plugin allows the application to detect if an inputed image target is visible, or not, by matching the image features with the device camera features using [OpenCV](http://opencv.org/) v2.4.11. It also presents the device camera preview in the background.
+This plugin allows the application to detect if an inputed image target is visible, or not, by matching the image features with the device camera features using [OpenCV](http://opencv.org/) v3.1. It also presents the device camera preview in the background.
 
 ### Note
 The plugin is aimed to work in **portrait mode**, should also work in landscape but no guarantees.

@@ -24,7 +24,6 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.webkit.WebView;
 import android.widget.FrameLayout;
 
 import org.apache.cordova.CallbackContext;
@@ -50,13 +49,13 @@ import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
-import org.opencv.features2d.DMatch;
+import org.opencv.core.DMatch;
 import org.opencv.features2d.DescriptorExtractor;
 import org.opencv.features2d.DescriptorMatcher;
 import org.opencv.features2d.FeatureDetector;
 import org.opencv.features2d.Features2d;
-import org.opencv.features2d.KeyPoint;
-import org.opencv.highgui.Highgui;
+import org.opencv.core.KeyPoint;
+import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
@@ -120,10 +119,10 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         }
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public void initialize(CordovaInterface cordova, CordovaWebView webView) {
         activity = cordova.getActivity();
+
         super.initialize(cordova, webView);
 
         mLoaderCallback = new BaseLoaderCallback(activity) {
@@ -314,7 +313,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         super.onResume(multitasking);
         if (!OpenCVLoader.initDebug()) {
             Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
-            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_11, activity, mLoaderCallback);
+            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_1_0, activity, mLoaderCallback);
         } else {
             Log.d(TAG, "OpenCV library found inside package. Using it!");
             mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
@@ -611,7 +610,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                 if(save_files) {
                     if (count % 10 == 0) {
                         String extStorageDirectory = Environment.getExternalStorageDirectory().toString();
-                        Highgui.imwrite(extStorageDirectory + "/pic" + count + ".png", gray);
+                        Imgcodecs.imwrite(extStorageDirectory + "/pic" + count + ".png", gray);
                         Log.i("### FILE ###", "File saved to " + extStorageDirectory + "/pic" + count + ".png");
                     }
                     count++;
@@ -699,22 +698,53 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                         Mat H = Calib3d.findHomography(obj, scene, Calib3d.RANSAC, 5);
 
                         boolean result = true;
-                        double det = H.get(0, 0)[0] * H.get(1, 1)[0] - H.get(1, 0)[0] * H.get(0, 1)[0];
-                        if (det < 0) {
-                            result = false;
-                        }
-                        double N1 = Math.sqrt(H.get(0, 0)[0] * H.get(0, 0)[0] + H.get(1, 0)[0] * H.get(1, 0)[0]);
-                        if (N1 > 4 || N1 < 0.1) {
-                            result = false;
-                        }
 
-                        double N2 = Math.sqrt(H.get(0, 1)[0] * H.get(0, 1)[0] + H.get(1, 1)[0] * H.get(1, 1)[0]);
-                        if (N2 > 4 || N2 < 0.1) {
-                            result = false;
-                        }
+                        double det = 0, N1 = 0, N2 = 0, N3 = 0;
 
-                        double N3 = Math.sqrt(H.get(2, 0)[0] * H.get(2, 0)[0] + H.get(2, 1)[0] * H.get(2, 1)[0]);
-                        if (N3 > 0.002) {
+                        if (H != null) {
+                            double[] p1 = H.get(0, 0);
+                            double[] p2 = H.get(1, 1);
+                            double[] p3 = H.get(1, 0);
+                            double[] p4 = H.get(0, 1);
+                            double[] p5 = H.get(2, 0);
+                            double[] p6 = H.get(2, 1);
+
+                            if (p1 != null && p2 != null && p3 != null && p4 != null) {
+                                det = p1[0] * p2[0] - p3[0] * p4[0];
+                                if (det < 0) {
+                                    result = false;
+                                }
+                            } else {
+                                result = false;
+                            }
+
+                            if (p1 != null && p3 != null) {
+                                N1 = Math.sqrt(p1[0] * p1[0] + p3[0] * p3[0]);
+                                if (N1 > 4 || N1 < 0.1) {
+                                    result = false;
+                                }
+                            } else {
+                                result = false;
+                            }
+
+                            if (p2 != null && p4 != null) {
+                                N2 = Math.sqrt(p4[0] * p4[0] + p2[0] * p2[0]);
+                                if (N2 > 4 || N2 < 0.1) {
+                                    result = false;
+                                }
+                            } else {
+                                result = false;
+                            }
+
+                            if (p5 != null && p6 != null) {
+                                N3 = Math.sqrt(p5[0] * p5[0] + p6[0] * p6[0]);
+                                if (N3 > 0.002) {
+                                    result = false;
+                                }
+                            } else {
+                                result = false;
+                            }
+                        } else {
                             result = false;
                         }
 
@@ -729,22 +759,24 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                                 Mat obj_corners = new Mat(4, 1, CvType.CV_32FC2);
                                 Mat scene_corners = new Mat(4, 1, CvType.CV_32FC2);
 
-                                obj_corners.put(0, 0, new double[]{0, 0});
-                                obj_corners.put(1, 0, new double[]{pattern.cols(), 0});
-                                obj_corners.put(2, 0, new double[]{pattern.cols(), pattern.rows()});
-                                obj_corners.put(3, 0, new double[]{0, pattern.rows()});
+                                obj_corners.put(0, 0, 0, 0);
+                                obj_corners.put(1, 0, pattern.cols(), 0);
+                                obj_corners.put(2, 0, pattern.cols(), pattern.rows());
+                                obj_corners.put(3, 0, 0, pattern.rows());
 
                                 Core.perspectiveTransform(obj_corners, scene_corners, H);
 
-                                Core.line(img_matches, new Point(scene_corners.get(0, 0)), new Point(scene_corners.get(1, 0)), new Scalar(0, 255, 0), 4);
-                                Core.line(img_matches, new Point(scene_corners.get(1, 0)), new Point(scene_corners.get(2, 0)), new Scalar(0, 255, 0), 4);
-                                Core.line(img_matches, new Point(scene_corners.get(2, 0)), new Point(scene_corners.get(3, 0)), new Scalar(0, 255, 0), 4);
-                                Core.line(img_matches, new Point(scene_corners.get(3, 0)), new Point(scene_corners.get(0, 0)), new Scalar(0, 255, 0), 4);
+                                Imgproc.line(img_matches, new Point(scene_corners.get(0, 0)), new Point(scene_corners.get(1, 0)), new Scalar(0, 255, 0), 4);
+                                Imgproc.line(img_matches, new Point(scene_corners.get(1, 0)), new Point(scene_corners.get(2, 0)), new Scalar(0, 255, 0), 4);
+                                Imgproc.line(img_matches, new Point(scene_corners.get(2, 0)), new Point(scene_corners.get(3, 0)), new Scalar(0, 255, 0), 4);
+                                Imgproc.line(img_matches, new Point(scene_corners.get(3, 0)), new Point(scene_corners.get(0, 0)), new Scalar(0, 255, 0), 4);
                             }
                         } else {
                             updateState(false);
                         }
-                        H.release();
+                        if (H != null) {
+                            H.release();
+                        }
                     }
                 }
                 gray.release();
@@ -773,11 +805,10 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         //Imgproc.equalizeHist(pattern, pattern);
 
         if(save_files) {
-            Bitmap bmp = scaled;
-            Utils.matToBitmap(pattern, bmp);
+            Utils.matToBitmap(pattern, scaled);
             String extStorageDirectory = Environment.getExternalStorageDirectory().toString();
             int num = (int) (Math.random() * 10001);
-            Highgui.imwrite(extStorageDirectory + "/pic" + num + ".png", pattern);
+            Imgcodecs.imwrite(extStorageDirectory + "/pic" + num + ".png", pattern);
             Log.i("### FILE ###", "File saved to " + extStorageDirectory + "/pic" + num + ".png");
         }
 

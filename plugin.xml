@@ -2,14 +2,14 @@
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
     xmlns:android="http://schemas.android.com/apk/res/android"
     id="com.cloudoki.imagedetectionplugin"
-    version="0.0.1">
+    version="0.0.2">
     <name>Image Detection Plugin</name>
 
     <description>The ImageDetectionPlugin for Cordova enables the use of OpenCV SDK to detect an inputed image.</description>
 
     <author>Délio Amaral</author>
 
-    <keywords>OpenCV,image detection, image matching</keywords>
+    <keywords>OpenCV, image detection, image matching</keywords>
 
     <repo>https://github.com/</repo>
 
