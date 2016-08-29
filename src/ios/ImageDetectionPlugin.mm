@@ -7,13 +7,15 @@ using namespace cv;
 
 @interface ImageDetectionPlugin()
 {
-    Mat patt, desc1;
-    std::vector<KeyPoint> kp1;
+    std::vector<Mat> triggers, triggers_descs;
+    std::vector< std::vector<KeyPoint> > triggers_kps;
     bool processFrames, debug, save_files, thread_over, called_success_detection, called_failed_detection;
+    int detected_index;
     NSMutableArray *detection;
     NSString *callbackID;
     NSDate *last_time, *ease_last_time, *timeout_started;
     float timeout, full_timeout, ease_time;
+    NSUInteger triggers_size;
 }
 
 @end
@@ -44,19 +46,39 @@ using namespace cv;
     callbackID = command.callbackId;
 }
 
-- (void)setPattern:(CDVInvokedUrlCommand*)command;
+- (void)setPatterns:(CDVInvokedUrlCommand*)command;
 {
     [self.commandDelegate runInBackground:^{
         CDVPluginResult* plugin_result = nil;
-        NSString* pattern = [command.arguments objectAtIndex:0];
-        NSString* msg;
+        NSMutableString* msg = [NSMutableString stringWithString:@""];
+        NSArray* patterns = [[NSArray alloc] init];
+        patterns = command.arguments;
 
-        if (pattern != nil && [pattern length] > 0) {
-            [self setBase64Pattern: pattern];
-            msg = @"pattern selected";
-            plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
+        if (patterns != nil && [patterns count] > 0) {
+            triggers_size = [patterns count];
+            triggers.clear();
+            triggers_kps.clear();
+            triggers_descs.clear();
+            [msg appendFormat:@"Patterns to be set - %lu", (unsigned long)[patterns count]];
+            int triggers_length = 0;
+            if(!triggers.empty()){
+                triggers_length = (int)triggers.size();
+            }
+            [msg appendFormat:@"\nBefore set pattern - %d", triggers_length];
+            [self setBase64Pattern: patterns];
+            if(!triggers.empty()){
+                triggers_length = (int)triggers.size();
+            }
+            [msg appendFormat:@"\nAfter set pattern - %d", triggers_length];
+            if((int) triggers.size() == triggers_size){
+                [msg appendFormat:@"\nPatterns set - %d", triggers_length];
+                plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
+            } else {
+                [msg appendString:@"\nOne or more patterns failed to be set."];
+                plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
+            }
         } else {
-            msg = @"a pattern must be set";
+            [msg appendString:@"At least one pattern must be set."];
             plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
         }
 
@@ -119,44 +141,57 @@ using namespace cv;
     }];
 }
 
--(void)setBase64Pattern:(NSString *)image_base64
+-(void)setBase64Pattern:(NSArray *)patterns
 {
-    if ([image_base64 rangeOfString:@"data:"].location == NSNotFound) {
-        // do nothing
-    } else {
-        NSArray *lines = [image_base64 componentsSeparatedByString: @","];
-        image_base64 = lines[1];
-    }
-
-    int width_limit = 400, height_limit = 400;
-
-    UIImage *image = [ImageUtils decodeBase64ToImage: image_base64];
-    UIImage *scaled = image;
-
-    // scale image to improve detection
-    //NSLog(@"SCALE BEFORE %f", (scaled.size.width));
-    if(image.size.width > width_limit) {
-        scaled = [UIImage imageWithCGImage:[image CGImage] scale:(image.size.width/width_limit) orientation:(image.imageOrientation)];
-        if(scaled.size.height > height_limit) {
-            scaled = [UIImage imageWithCGImage:[scaled CGImage] scale:(scaled.size.height/height_limit) orientation:(scaled.imageOrientation)];
-        }
-    }
-    //NSLog(@"SCALE AFTER %f", (scaled.size.width));
-
-    patt = [ImageUtils cvMatFromUIImage: scaled];
-
-    patt = [ImageUtils cvMatFromUIImage: scaled];
-    cvtColor(patt, patt, CV_BGRA2GRAY);
-    //equalizeHist(patt, patt);
-
-    //save mat as image
-    if (save_files)
-    {
-        UIImageWriteToSavedPhotosAlbum([ImageUtils UIImageFromCVMat:patt], nil, nil, nil);
-    }
     Ptr<ORB> orb = ORB::create();
-    orb->detect(patt, kp1);
-    orb->compute(patt, kp1, desc1);
+
+    for (int i = 0; i < [patterns count]; i++) {
+        [detection insertObject:[NSNumber numberWithInt:0] atIndex:i];
+        NSString *image_base64 = [patterns objectAtIndex:i];
+
+        if ([image_base64 rangeOfString:@"data:"].location == NSNotFound) {
+            // do nothing
+        } else {
+            NSArray *lines = [image_base64 componentsSeparatedByString: @","];
+            image_base64 = lines[1];
+        }
+
+        int width_limit = 400, height_limit = 400;
+
+        UIImage *image = [ImageUtils decodeBase64ToImage: image_base64];
+        UIImage *scaled = image;
+
+        // scale image to improve detection
+        //NSLog(@"SCALE BEFORE %f", (scaled.size.width));
+        if(image.size.width > width_limit) {
+            scaled = [UIImage imageWithCGImage:[image CGImage] scale:(image.size.width/width_limit) orientation:(image.imageOrientation)];
+            if(scaled.size.height > height_limit) {
+                scaled = [UIImage imageWithCGImage:[scaled CGImage] scale:(scaled.size.height/height_limit) orientation:(scaled.imageOrientation)];
+            }
+        }
+        //NSLog(@"SCALE AFTER %f", (scaled.size.width));
+
+        Mat patt, desc1;
+        std::vector<KeyPoint> kp1;
+
+        patt = [ImageUtils cvMatFromUIImage: scaled];
+
+        patt = [ImageUtils cvMatFromUIImage: scaled];
+        cvtColor(patt, patt, CV_BGRA2GRAY);
+        //equalizeHist(patt, patt);
+
+        //save mat as image
+        if (save_files)
+        {
+            UIImageWriteToSavedPhotosAlbum([ImageUtils UIImageFromCVMat:patt], nil, nil, nil);
+        }
+        orb->detect(patt, kp1);
+        orb->compute(patt, kp1, desc1);
+
+        triggers.push_back(patt);
+        triggers_kps.push_back(kp1);
+        triggers_descs.push_back(desc1);
+    }
 }
 
 - (void)pluginInitialize {
@@ -205,6 +240,8 @@ using namespace cv;
     ease_last_time = last_time;
 
     detection = [[NSMutableArray alloc] init];
+    triggers_size = -1;
+    detected_index = -1;
 
     [self.camera start];
     NSLog(@"----------- CAMERA STARTED ----------");
@@ -224,7 +261,11 @@ using namespace cv;
     //NSLog(@"time passed %f, time full %f, passed ease %f", time_passed, time_diff_passed, passed_ease);
 
     //process frames if option is true and timeout passed
-    if (processFrames && time_passed > timeout) {
+    BOOL hasTriggerSet = false;
+    if(!triggers.empty()){
+        hasTriggerSet = triggers.size() == triggers_size;
+    }
+    if (processFrames && time_passed > timeout && hasTriggerSet) {
         //check if time passed full timout time
         if(time_diff_passed > full_timeout) {
             ease_time = 0.0;
@@ -233,14 +274,21 @@ using namespace cv;
         if (passed_ease > ease_time) {
             // process each image in new thread
             if(!image.empty() && thread_over){
-                thread_over = false;
-                Mat image_copy = image.clone();
-                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                    [self backgroundImageProcessing: image_copy];
-                    dispatch_sync(dispatch_get_main_queue(), ^{
-                        thread_over = true;
+                for (int i = 0; i < triggers.size(); i++) {
+                    Mat patt = triggers.at(i);
+                    std::vector<KeyPoint> kp1 = triggers_kps.at(i);
+                    Mat desc1 = triggers_descs.at(i);
+                    thread_over = false;
+                    Mat image_copy = image.clone();
+                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                        [self backgroundImageProcessing: image_copy pattern:patt keypoints:kp1 descriptor:desc1 index:i];
+                        dispatch_sync(dispatch_get_main_queue(), ^{
+                            if(i == (triggers.size() - 1)) {
+                                thread_over = true;
+                            }
+                        });
                     });
-                });
+                }
             }
             ease_last_time = current_time;
         }
@@ -253,7 +301,7 @@ using namespace cv;
 #endif
 
 #ifdef __cplusplus
-- (void)backgroundImageProcessing:(const Mat &)image
+- (void)backgroundImageProcessing:(const Mat &)image pattern:(const Mat &)patt keypoints:(const std::vector<KeyPoint> &)kp1 descriptor:(const Mat &)desc1 index:(const int &)idx
 {
     if(!image.empty() && !patt.empty())
     {
@@ -380,8 +428,8 @@ using namespace cv;
 
                 if(result)
                 {
-                    //NSLog(@"detecting");
-                    [self updateState: true];
+                    NSLog(@"detecting for index - %d", (int)idx);
+                    [self updateState: true index:(int)idx];
                     if(save_files)
                     {
                         UIImageWriteToSavedPhotosAlbum([ImageUtils UIImageFromCVMat:gray], nil, nil, nil);
@@ -405,7 +453,7 @@ using namespace cv;
                         //image_copy = img_matches;
                     }
                 } else {
-                    [self updateState: false];
+                    [self updateState: false index:(int)idx];
                 }
                 H.release();
                 img_matches.release();
@@ -422,27 +470,37 @@ using namespace cv;
 }
 #endif
 
--(void)updateState:(BOOL) state
+-(void)updateState:(BOOL) state index:(const int &)idx
 {
     int detection_limit = 6;
+//
+//    if(detection.count > detection_limit)
+//    {
+//        [detection removeObjectAtIndex:0];
+//    }
 
-    if(detection.count > detection_limit)
-    {
-
-        [detection removeObjectAtIndex:0];
-    }
+    NSLog(@"updating state for index - %d", (int)idx);
 
     if(state)
     {
-        [detection addObject:[NSNumber numberWithBool:YES]];
+        int result = [[detection objectAtIndex:(int)idx] intValue] + 1;
+        if(result < detection_limit) {
+            [detection replaceObjectAtIndex:idx withObject:[NSNumber numberWithInt:result]];
+        }
     } else {
-        [detection addObject:[NSNumber numberWithBool:NO]];
+        for (int i = 0; i < triggers.size(); i++) {
+            int result = [[detection objectAtIndex:(int)i] intValue] - 1;
+            if(result < 0) {
+                result = 0;
+            }
+            [detection replaceObjectAtIndex:idx withObject:[NSNumber numberWithInt:result]];
+        }
     }
 
-    if([self getState] && called_failed_detection && !called_success_detection) {
+    if([self getState:(int)idx] && called_failed_detection && !called_success_detection) {
         [self.commandDelegate runInBackground:^{
             CDVPluginResult* plugin_result = nil;
-            NSString* msg = @"pattern detected";
+            NSString* msg = [NSString stringWithFormat:@"{\"message\":\"pattern detected\", \"index\":%d}", (int)idx];
             plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
             [plugin_result setKeepCallbackAsBool:YES];
 
@@ -450,11 +508,15 @@ using namespace cv;
         }];
         called_success_detection = true;
         called_failed_detection = false;
+        detected_index = (int)idx;
     }
-    if(![self getState] && !called_failed_detection && called_success_detection) {
+
+    bool valid_index = detected_index == (int)idx;
+
+    if(![self getState:(int)idx] && !called_failed_detection && called_success_detection && valid_index) {
         [self.commandDelegate runInBackground:^{
             CDVPluginResult* plugin_result = nil;
-            NSString* msg = @"pattern not detected";
+            NSString* msg = @"{\"message\":\"pattern not detected\"}";
             plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:msg];
             [plugin_result setKeepCallbackAsBool:YES];
 
@@ -465,14 +527,12 @@ using namespace cv;
     }
 }
 
--(BOOL)getState
+-(BOOL)getState: (const int &) index
 {
     int detection_thresh = 3;
     NSNumber *total = 0;
+    total = [detection objectAtIndex:index];
 
-    for (NSNumber *states in detection){
-        total = [NSNumber numberWithInt:([total intValue] + [states intValue])];
-    }
     if ([total intValue] >= detection_thresh) {
         return true;
     } else {

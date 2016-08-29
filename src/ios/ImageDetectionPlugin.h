@@ -16,7 +16,7 @@
 
 - (void)isDetecting:(CDVInvokedUrlCommand*)command;
 
-- (void)setPattern:(CDVInvokedUrlCommand*)command;
+- (void)setPatterns:(CDVInvokedUrlCommand*)command;
 
 - (void)startProcessing:(CDVInvokedUrlCommand*)command;
 

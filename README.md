@@ -1,6 +1,9 @@
 # Image Detection Plugin (android & ios)
 This plugin allows the application to detect if an inputed image target is visible, or not, by matching the image features with the device camera features using [OpenCV](http://opencv.org/) v3.1. It also presents the device camera preview in the background.
 
+## Changes
+- Added setting multiple patterns and loop functionality to detect which is visible
+
 ### Note
 The plugin is aimed to work in **portrait mode**, should also work in landscape but no guarantees.
 
@@ -35,7 +38,7 @@ Again in *config.xml* add the following preference.
 ```
 
 ## Usage
-The plugin offers the functions `startProcessing`, `isDetecting` and `setPattern`.
+The plugin offers the functions `startProcessing`, `setDetectionTimeout`, `isDetecting` and `setPattern`.
 
 **`startProcessing`** - the plugin will process the video frames captured by the camera if the inputed argument is `true`, if the argument is `false` no frames will be processed. Calls on success if the argument is set and on error if no value set.
 
@@ -44,7 +47,7 @@ The plugin offers the functions `startProcessing`, `isDetecting` and `setPattern
 startProcessing(true or false, successCallback, errorCallback);
 ```
 
-**`isDetecting`** - the plugin will callback on success function if detecting the pattern or on error function if it's not.
+**`isDetecting`** - the plugin will callback on success function if detecting the pattern or on error function if it's not. The response will also say what index of the patters set is being detected in a JSON object. Just parse it using `JSON.parse()`.
 ```javascript
 isDetecting(successCallback, errorCallback);
 ```
@@ -53,31 +56,71 @@ isDetecting(successCallback, errorCallback);
 setDetectionTimeout(timeout, successCallback, errorCallback);
 ```
 
-**`setPattern`** - sets the new pattern target to be detected. Calls on success if the pattern is set and on error if no pattern set. The input pattern must be a base64 image.
+**`setPatterns`** - sets the patterns targets to be detected. Calls on success if the patterns are set and on error if one or more patterns fail to be set. The input patterns must be an array of base64 image string.
 ```javascript
-setPattern(base64image, successCallback, errorCallback);
+setPatterns([base64image, ...], successCallback, errorCallback);
 ```
 
 ## Usage example
 ```javascript
-ImageDetectionPlugin.startProcessing(true, function(success){console.log(success);}, function(error){console.log(error);});
+var imgDetectionPlugin = window.plugins.ImageDetectionPlugin || new ImageDetectionPlugin();
 
-ImageDetectionPlugin.isDetecting(function(success){console.log(success);}, function(error){console.log(error);});
+imgDetectionPlugin.startProcessing(true, function(success){console.log(success);}, function(error){console.log(error);});
 
-var img = new Image();
-img.crossOrigin = "Anonymous";
-img.onload = function () {
+imgDetectionPlugin.isDetecting(function(success){
+  console.log(success);
+  var resp = JSON.parse(success);
+  console.log(resp.index, "image detected - ", indexes[resp.index]);
+}, function(error){console.log(error);});
+
+function setAllPatterns(patterns) {
+  imgDetectionPlugin.setPatterns(patterns, function(success){console.log(success);}, function(error){console.log(error);});
+}
+
+var loadAllImg = 0;
+var patternsHolder = [];
+var indexes = {};
+var limit = 3;
+
+function ToDataURL (self) {
   var canvas = document.createElement('canvas');
   var ctx = canvas.getContext('2d');
   var dataURL;
-  canvas.height = this.height;
-  canvas.width = this.width;
-  ctx.drawImage(this, 0, 0);
+  canvas.height = self.height;
+  canvas.width = self.width;
+  ctx.drawImage(self, 0, 0);
   dataURL = canvas.toDataURL("image/jpeg", 0.8);
-  ImageDetectionPlugin.setPattern(dataURL, function(success){console.log(success);}, function(error){console.log(error);});
+  patternsHolder.push(dataURL);
+  indexes[loadAllImg] = self.src.substr(self.src.lastIndexOf("/") + 1);
+  loadAllImg += 1;
+  console.log("!!!", loadAllImg, indexes);
+  if(loadAllImg == limit){
+    console.log("patterns set", patternsHolder);
+    setAllPatterns(patternsHolder);
+  }
   canvas = null;
-};
-img.src = "img/patterns/target.jpg";
+}
 
-ImageDetectionPlugin.setDetectionTimeout(2, function(success){console.log(success);}, function(error){console.log(error);});
+var img = new Image();
+img.crossOrigin = "Anonymous";
+img.onload = function(){
+  ToDataURL(this)
+};
+img.src = "img/patterns/target1.jpg";
+
+var img = new Image();
+img.crossOrigin = "Anonymous";
+img.onload = function(){
+  ToDataURL(this)
+};
+img.src = "img/patterns/target2.jpg";
+
+var img = new Image();
+img.crossOrigin = "Anonymous";
+img.onload = function(){
+  ToDataURL(this)
+};
+img.src = "img/patterns/target3.jpg";
+
+imgDetectionPlugin.setDetectionTimeout(2, function(success){console.log(success);}, function(error){console.log(error);});
 ```
