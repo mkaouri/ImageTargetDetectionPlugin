@@ -76,12 +76,9 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     private Activity             activity;
     private SurfaceHolder        surfaceHolder;
     private Mat                  mYuv;
-    private Mat                  desc1;
     private Mat                  desc2;
     private FeatureDetector      orbDetector;
     private DescriptorExtractor  orbDescriptor;
-    private Mat                  pattern;
-    private MatOfKeyPoint        kp1;
     private MatOfKeyPoint        kp2;
     private MatOfDMatch          matches;
     private CallbackContext      cb;
@@ -90,6 +87,12 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             called_success_detection = false, called_failed_detection = true,
             previewing = false, save_files = false;
     private List<Integer> detection = new ArrayList<>();
+
+    private List<Mat> triggers = new ArrayList<>();
+    private List<MatOfKeyPoint> triggers_kps = new ArrayList<>();
+    private List<Mat> triggers_descs = new ArrayList<>();
+    private int trigger_size = -1, detected_index = -1;
+
     private double timeout = 0.0;
     private int cameraId = -1;
     private int mCameraIndex = CAMERA_ID_ANY;
@@ -190,18 +193,31 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             cb = callbackContext;
             return true;
         }
-        if(action.equals("setPattern")) {
-            Log.i(TAG, "setPattern called");
-            String message;
-            String image = data.getString(0);
-            if(image != null && !image.isEmpty()) {
-                setBase64Pattern(image);
-                message = "pattern selected";
-                callbackContext.success(message);
-            } else {
-                message = "a pattern must be set";
-                callbackContext.error(message);
-            }
+        if(action.equals("setPatterns")) {
+            Log.i(TAG, "setPatterns called");
+            final JSONArray inputData = data;
+            final CallbackContext cbContext = callbackContext;
+            cordova.getThreadPool().execute(new Runnable() {
+                public void run() {
+                    // clear before adding triggers
+                    triggers.clear();
+                    triggers_kps.clear();
+                    triggers_descs.clear();
+
+                    String message = "Pattens to be set - " + inputData.length();
+                    message += "\nBefore set pattern " + triggers.size();
+                    setBase64Pattern(inputData);
+                    message += "\nAfter set pattern " + triggers.size();
+                    if(inputData.length() == triggers.size()) {
+                        trigger_size = triggers.size();
+                        message += "\nPatterns set - " + triggers.size();
+                        cbContext.success(message);
+                    } else {
+                        message += "\nOne or more patterns failed to be set.";
+                        cbContext.error(message);
+                    }
+                }
+            });
             return true;
         }
         if(action.equals("startProcessing")) {
@@ -335,12 +351,9 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        pattern = new Mat();
         matches = new MatOfDMatch();
         orbDetector = FeatureDetector.create(FeatureDetector.ORB);
         orbDescriptor = DescriptorExtractor.create(DescriptorExtractor.ORB);
-        kp1 = new MatOfKeyPoint();
-        desc1 = new Mat();
         kp2 = new MatOfKeyPoint();
         desc2 = new Mat();
     }
@@ -583,14 +596,21 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             Date current_time = new Date();
             double time_passed = Math.abs(current_time.getTime() - last_time.getTime())/1000.0;
 
-            if(processFrames && time_passed > timeout) {
+            if(processFrames && time_passed > timeout && triggers.size() == trigger_size) {
                 if (thread_over) {
                     thread_over = false;
+
                     if (mYuv != null) mYuv.release();
                     Camera.Parameters params = camera.getParameters();
                     mYuv = new Mat(params.getPreviewSize().height, params.getPreviewSize().width, CvType.CV_8UC1);
                     mYuv.put(0, 0, data);
-                    processFrame();
+
+                    for (int i = 0; i < triggers.size(); i++) {
+                        Mat pattern = triggers.get(i);
+                        MatOfKeyPoint kp1 = triggers_kps.get(i);
+                        Mat desc1 = triggers_descs.get(i);
+                        processFrame(pattern, kp1, desc1, i);
+                    }
                 }
                 //update time and reset timeout
                 last_time = current_time;
@@ -600,7 +620,11 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         }
     };
 
-    private void processFrame() {
+    private void processFrame(Mat _pattern, MatOfKeyPoint _kp1, Mat _desc1, int _index) {
+        final Mat pattern = _pattern;
+        final MatOfKeyPoint kp1 = _kp1;
+        final Mat desc1 = _desc1;
+        final int index = _index;
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
                 Mat gray = mYuv.submat(0, mYuv.rows(), 0, mYuv.cols()).t();
@@ -754,7 +778,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
                         if (result) {
                             Log.i("#### DETECTION ####", "Detected stuff");
-                            updateState(true);
+                            updateState(true, index);
                             if (debug) {
                                 Mat obj_corners = new Mat(4, 1, CvType.CV_32FC2);
                                 Mat scene_corners = new Mat(4, 1, CvType.CV_32FC2);
@@ -772,73 +796,115 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                                 Imgproc.line(img_matches, new Point(scene_corners.get(3, 0)), new Point(scene_corners.get(0, 0)), new Scalar(0, 255, 0), 4);
                             }
                         } else {
-                            updateState(false);
+                            updateState(false, index);
                         }
                         H.release();
                     }
                 }
                 gray.release();
-                thread_over = true;
+                if(index == (trigger_size - 1)) {
+                    thread_over = true;
+                }
             }
         });
     }
 
-    private void setBase64Pattern(String image_base64) {
-        int limit = 400;
-        if(image_base64.contains("data:"))
-            image_base64 = image_base64.split(",")[1];
-        byte[] decodedString = Base64.decode(image_base64, Base64.DEFAULT);
-        Bitmap bitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
-        Bitmap scaled = bitmap;
-        if (bitmap.getWidth() > limit) {
-            double scale = bitmap.getWidth() / limit;
-            scaled = Bitmap.createScaledBitmap(bitmap, (int) (bitmap.getWidth()/scale), (int) (bitmap.getHeight()/scale), true);
-            if (bitmap.getHeight() > limit) {
-                scale = bitmap.getHeight() / limit;
-                scaled = Bitmap.createScaledBitmap(bitmap, (int) (bitmap.getWidth()/scale), (int) (bitmap.getHeight()/scale), true);
+    private void setBase64Pattern(JSONArray dataArray) {
+        for (int i = 0; i < dataArray.length(); i++) {
+            try {
+                String image_base64 = dataArray.getString(i);
+                if(image_base64 != null && !image_base64.isEmpty()) {
+                    Mat image_pattern = new Mat();
+                    MatOfKeyPoint kp1 = new MatOfKeyPoint();
+                    Mat desc1 = new Mat();
+
+                    int limit = 400;
+                    if(image_base64.contains("data:"))
+                        image_base64 = image_base64.split(",")[1];
+                    byte[] decodedString = Base64.decode(image_base64, Base64.DEFAULT);
+                    Bitmap bitmap = BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length);
+                    Bitmap scaled = bitmap;
+                    if (bitmap.getWidth() > limit) {
+                        double scale = bitmap.getWidth() / limit;
+                        scaled = Bitmap.createScaledBitmap(bitmap, (int) (bitmap.getWidth()/scale), (int) (bitmap.getHeight()/scale), true);
+                        if (bitmap.getHeight() > limit) {
+                            scale = bitmap.getHeight() / limit;
+                            scaled = Bitmap.createScaledBitmap(bitmap, (int) (bitmap.getWidth()/scale), (int) (bitmap.getHeight()/scale), true);
+                        }
+                    }
+                    Utils.bitmapToMat(scaled, image_pattern);
+                    Imgproc.cvtColor(image_pattern, image_pattern, Imgproc.COLOR_BGR2GRAY);
+                    //Imgproc.equalizeHist(image_pattern, image_pattern);
+
+                    if(save_files) {
+                        Utils.matToBitmap(image_pattern, scaled);
+                        String extStorageDirectory = Environment.getExternalStorageDirectory().toString();
+                        int num = (int) (Math.random() * 10001);
+                        Imgcodecs.imwrite(extStorageDirectory + "/pic" + num + ".png", image_pattern);
+                        Log.i("### FILE ###", "File saved to " + extStorageDirectory + "/pic" + num + ".png");
+                    }
+
+                    orbDetector.detect(image_pattern, kp1);
+                    orbDescriptor.compute(image_pattern, kp1, desc1);
+
+                    triggers.add(image_pattern);
+                    triggers_kps.add(kp1);
+                    triggers_descs.add(desc1);
+                }
+            } catch (JSONException e) {
+                // do nothing
             }
         }
-        Utils.bitmapToMat(scaled, pattern);
-        Imgproc.cvtColor(pattern, pattern, Imgproc.COLOR_BGR2GRAY);
-        //Imgproc.equalizeHist(pattern, pattern);
-
-        if(save_files) {
-            Utils.matToBitmap(pattern, scaled);
-            String extStorageDirectory = Environment.getExternalStorageDirectory().toString();
-            int num = (int) (Math.random() * 10001);
-            Imgcodecs.imwrite(extStorageDirectory + "/pic" + num + ".png", pattern);
-            Log.i("### FILE ###", "File saved to " + extStorageDirectory + "/pic" + num + ".png");
-        }
-
-        orbDetector.detect(pattern, kp1);
-        orbDescriptor.compute(pattern, kp1, desc1);
     }
 
-    private void updateState(boolean state) {
-        if (detection.size() > 6) {
-            detection.remove(0);
-        }
-        if (state) {
-            detection.add(1);
+    private void updateState(boolean state, int _index) {
+        final int index = _index;
+
+        int detection_limit = 6;
+
+        if(state) {
+            try {
+                int result = detection.get(_index) + 1;
+                if(result < detection_limit) {
+                    detection.set(_index, result);
+                }
+            } catch (IndexOutOfBoundsException ibe){
+                detection.add(_index, 1);
+            }
         } else {
-            detection.add(0);
+            for (int i = 0; i < triggers.size(); i++) {
+                try {
+                    int result = detection.get(i) - 1;
+                    if(result < 0) {
+                        detection.set(_index, 0);
+                    } else {
+                        detection.set(_index, result);
+                    }
+                } catch (IndexOutOfBoundsException ibe){
+                    detection.add(i, 0);
+                }
+            }
         }
 
-        if (getState() && called_failed_detection && !called_success_detection) {
+        if (getState(_index) && called_failed_detection && !called_success_detection) {
             cordova.getThreadPool().execute(new Runnable() {
                 public void run() {
-                    PluginResult result = new PluginResult(PluginResult.Status.OK, "pattern detected");
+                    PluginResult result = new PluginResult(PluginResult.Status.OK, "{\"message\":\"pattern detected\", \"index\":" + index + "}");
                     result.setKeepCallback(true);
                     cb.sendPluginResult(result);
                 }
             });
             called_success_detection = true;
             called_failed_detection = false;
+            detected_index = _index;
         }
-        if (!getState() && !called_failed_detection && called_success_detection) {
+
+        boolean valid_index = detected_index == _index;
+
+        if (!getState(_index) && !called_failed_detection && called_success_detection && valid_index) {
             cordova.getThreadPool().execute(new Runnable() {
                 public void run() {
-                    PluginResult result = new PluginResult(PluginResult.Status.ERROR, "pattern not detected");
+                    PluginResult result = new PluginResult(PluginResult.Status.ERROR, "{\"message\":\"pattern not detected\"}");
                     result.setKeepCallback(true);
                     cb.sendPluginResult(result);
                 }
@@ -848,17 +914,16 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         }
     }
 
-    private boolean getState() {
+    private boolean getState(int index) {
         int total;
-        total = 0;
-        for (int intValue : detection){
-            total += intValue;
-        }
+        int detection_thresh = 3;
+
+        total = detection.get(index);
 
         if(debug) {
             Log.i("## GET STATE RESULT ##", " state -> " + total);
         }
 
-        return total >= 3;
+        return total >= detection_thresh;
     }
 }
