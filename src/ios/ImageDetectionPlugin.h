@@ -1,5 +1,5 @@
 #import <UIKit/UIKit.h>
-#import <opencv2/videoio/cap_ios.h>
+#import <opencv2/highgui/cap_ios.h>
 
 #import <Cordova/CDVPlugin.h>
 

@@ -1,6 +1,6 @@
 #import "ImageDetectionPlugin.h"
 #import "ImageUtils.h"
-#import <opencv2/imgcodecs/ios.h>
+#import <opencv2/highgui/ios.h>
 #import <opencv2/features2d/features2d.hpp>
 
 using namespace cv;
@@ -143,7 +143,7 @@ using namespace cv;
 
 -(void)setBase64Pattern:(NSArray *)patterns
 {
-    Ptr<ORB> orb = ORB::create();
+    ORB orb = ORB::ORB();
 
     for (int i = 0; i < [patterns count]; i++) {
         [detection insertObject:[NSNumber numberWithInt:0] atIndex:i];
@@ -185,8 +185,8 @@ using namespace cv;
         {
             UIImageWriteToSavedPhotosAlbum([ImageUtils UIImageFromCVMat:patt], nil, nil, nil);
         }
-        orb->detect(patt, kp1);
-        orb->compute(patt, kp1, desc1);
+        orb.detect(patt, kp1);
+        orb.compute(patt, kp1, desc1);
 
         triggers.push_back(patt);
         triggers_kps.push_back(kp1);
@@ -313,9 +313,9 @@ using namespace cv;
         cvtColor(image, gray, CV_BGRA2GRAY);
         //equalizeHist(gray, gray);
 
-        Ptr<ORB> orb = ORB::create();
-        orb->detect(gray, kp2);
-        orb->compute(gray, kp2, desc2);
+        ORB orb = ORB::ORB();
+        orb.detect(gray, kp2);
+        orb.compute(gray, kp2, desc2);
 
         BFMatcher bf = BFMatcher::BFMatcher(NORM_HAMMING2, true);
         std::vector<DMatch> matches;
