@@ -8,9 +8,11 @@ This plugin allows the application to detect if an inputed image target is visib
 The plugin is aimed to work in **portrait mode**, should also work in landscape but no guarantees.
 
 ## Install
-To install the plugin in your current Cordova project run
+To install the plugin in your current Cordova project run outside you project root
 ```
-cordova plugin add https://github.com/Cloudoki/ImageDetectionCordovaPlugin.git
+git clone https://github.com/Cloudoki/ImageDetectionCordovaPlugin.git
+cd <your-project-root>
+cordova plugin add ../ImageDetectionCordovaPlugin
 ```
 
 ### Android

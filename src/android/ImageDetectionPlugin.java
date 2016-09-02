@@ -596,7 +596,12 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             Date current_time = new Date();
             double time_passed = Math.abs(current_time.getTime() - last_time.getTime())/1000.0;
 
-            if(processFrames && time_passed > timeout && triggers.size() == trigger_size) {
+            boolean hasTriggerSet = false;
+            if(!triggers.isEmpty()){
+                hasTriggerSet = triggers.size() == trigger_size;
+            }
+
+            if(processFrames && time_passed > timeout && hasTriggerSet) {
                 if (thread_over) {
                     thread_over = false;
 
@@ -812,6 +817,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     private void setBase64Pattern(JSONArray dataArray) {
         for (int i = 0; i < dataArray.length(); i++) {
             try {
+                detection.add(0);
                 String image_base64 = dataArray.getString(i);
                 if(image_base64 != null && !image_base64.isEmpty()) {
                     Mat image_pattern = new Mat();
@@ -869,7 +875,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                     detection.set(_index, result);
                 }
             } catch (IndexOutOfBoundsException ibe){
-                detection.add(_index, 1);
+//                 detection.add(_index, 1);
             }
         } else {
             for (int i = 0; i < triggers.size(); i++) {
@@ -881,7 +887,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                         detection.set(_index, result);
                     }
                 } catch (IndexOutOfBoundsException ibe){
-                    detection.add(i, 0);
+//                    detection.add(i, 0);
                 }
             }
         }
