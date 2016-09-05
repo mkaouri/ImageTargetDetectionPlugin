@@ -815,6 +815,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     }
 
     private void setBase64Pattern(JSONArray dataArray) {
+        detection.clear();
         for (int i = 0; i < dataArray.length(); i++) {
             try {
                 detection.add(0);
