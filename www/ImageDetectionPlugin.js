@@ -15,6 +15,12 @@ ImageDetectionPlugin.prototype.setPatterns = function (patterns, successCallback
  }
  cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "setPatterns", _patterns);
 };
+ImageDetectionPlugin.prototype.setPatternsActions = function (patternsActions, successCallback, errorCallback) {
+  cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "setPatternsActions", [patternsActions]);
+};
+ImageDetectionPlugin.prototype.setLanguage = function (lang, successCallback, errorCallback) {
+  cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "setLanguage", [lang]);
+};
 ImageDetectionPlugin.prototype.isDetecting = function (successCallback, errorCallback) {
   cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "isDetecting", []);
 };

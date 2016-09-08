@@ -3,6 +3,7 @@ package com.cloudoki.imagedetectionplugin;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
@@ -11,6 +12,10 @@ import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
 import android.hardware.Camera;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Environment;
 import android.support.v4.app.ActivityCompat;
@@ -18,6 +23,7 @@ import android.support.v4.content.ContextCompat;
 import android.util.Base64;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -33,6 +39,7 @@ import org.apache.cordova.CordovaWebView;
 import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.LoaderCallbackInterface;
@@ -63,7 +70,10 @@ import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 
-public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder.Callback {
+import org.rajawali3d.surface.IRajawaliSurface;
+import org.rajawali3d.surface.RajawaliSurfaceView;
+
+public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder.Callback, View.OnTouchListener, SensorEventListener {
 
     private static final String  TAG = "OpenCV::Activity";
     private static final int     REQUEST_CAMERA_PERMISSIONS = 133;
@@ -100,11 +110,19 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     private BaseLoaderCallback mLoaderCallback;
     private FrameLayout cameraFrameLayout;
 
-    private  int count = 0;
+    private int count = 0;
+    private String lang;
+    private JSONObject patternsConfig;
     private String[] PERMISSIONS_STORAGE = {
             Manifest.permission.READ_EXTERNAL_STORAGE,
             Manifest.permission.WRITE_EXTERNAL_STORAGE
     };
+
+    private OGLRenderer renderer;
+    private RajawaliSurfaceView surface3d;
+    private SensorManager sensor;
+    private double old_x, old_y, old_z;
+    private boolean stored = false;
 
     @SuppressWarnings("deprecation")
     private static class JavaCameraSizeAccessor implements CameraBridgeViewBase.ListItemAccessor {
@@ -171,6 +189,20 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         openCamera();
 
         cameraFrameLayout.setVisibility(View.INVISIBLE);
+
+        surface3d = new RajawaliSurfaceView(activity.getApplicationContext());
+        surface3d.setFrameRate(60);
+        surface3d.setRenderMode(IRajawaliSurface.RENDERMODE_WHEN_DIRTY);
+
+        activity.getWindow().addContentView(surface3d, params);
+
+        surface3d.setTransparent(true);
+        surface3d.bringToFront();
+
+        renderer = new OGLRenderer(activity);
+        surface3d.setSurfaceRenderer(renderer);
+
+        surface3d.setOnTouchListener(this);
     }
 
     @Override
@@ -188,6 +220,20 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             }
             return true;
         }
+
+        if (action.equals("setLanguage")) {
+            Log.i(TAG, "setLanguage called");
+            String language = data.getString(0);
+            if(language != null && !language.isEmpty()) {
+                lang = language;
+                String message = "Language set to " + lang;
+                callbackContext.success(message);
+            } else {
+                callbackContext.error("Language was not set.");
+            }
+            return true;
+        }
+
         if (action.equals("isDetecting")) {
             Log.i(TAG, "isDetecting called");
             cb = callbackContext;
@@ -220,6 +266,25 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             });
             return true;
         }
+
+        if (action.equals("setPatternsActions")) {
+            Log.i(TAG, "setPatternsActions called");
+            final JSONObject config = data.getJSONObject(0);
+            patternsConfig = config;
+            final CallbackContext cbContext = callbackContext;
+            cordova.getThreadPool().execute(new Runnable() {
+                public void run() {
+                    if(config != null && config.length() > 0 && !lang.isEmpty()) {
+                        String message = "setPatternsActions config was set.";
+                        cbContext.success(message);
+                    } else {
+                        cbContext.error("setPatternsActions config was not set.");
+                    }
+                }
+            });
+            return true;
+        }
+
         if(action.equals("startProcessing")) {
             Log.i(TAG, "startProcessing called");
             String message;
@@ -277,19 +342,19 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                     REQUEST_CAMERA_PERMISSIONS);
         }
 
-        if(save_files) {
-            int permission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        //if(save_files) {
+        int permission = ActivityCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE);
 
-            if (permission != PackageManager.PERMISSION_GRANTED) {
-                // We don't have permission so prompt the user
-                int REQUEST_EXTERNAL_STORAGE = 1;
-                ActivityCompat.requestPermissions(
-                        activity,
-                        PERMISSIONS_STORAGE,
-                        REQUEST_EXTERNAL_STORAGE
-                );
-            }
+        if (permission != PackageManager.PERMISSION_GRANTED) {
+            // We don't have permission so prompt the user
+            int REQUEST_EXTERNAL_STORAGE = 1;
+            ActivityCompat.requestPermissions(
+                    activity,
+                    PERMISSIONS_STORAGE,
+                    REQUEST_EXTERNAL_STORAGE
+            );
         }
+        //}
 
         thread_over = true;
         debug = false;
@@ -299,12 +364,14 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         last_time = new Date();
 
         new android.os.Handler().postDelayed(
-            new Runnable() {
-                public void run() {
-                    cameraFrameLayout.setVisibility(View.VISIBLE);
-                    cameraFrameLayout.invalidate();
-                }
-            }, 2000);
+                new Runnable() {
+                    public void run() {
+                        cameraFrameLayout.setVisibility(View.VISIBLE);
+                        cameraFrameLayout.invalidate();
+                    }
+                }, 2000);
+
+        initialiseSensor();
     }
 
     public static void sendViewToBack(final View child) {
@@ -337,6 +404,8 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         if (camera == null) {
             openCamera();
         }
+
+        initialiseSensor();
     }
 
     @Override
@@ -899,14 +968,31 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                     PluginResult result = new PluginResult(PluginResult.Status.OK, "{\"message\":\"pattern detected\", \"index\":" + index + "}");
                     result.setKeepCallback(true);
                     cb.sendPluginResult(result);
+
+                    try {
+                        JSONObject pattern_config = patternsConfig.getJSONObject(index + "");
+                        String type =  pattern_config.getString("type");
+                        if(type.equalsIgnoreCase("object")) {
+                            String object = pattern_config.getString("object");
+                            String texture = pattern_config.getString("texture_" + lang);
+                            renderer.addObject(object, texture, activity);
+                        }
+                        else if(type.equalsIgnoreCase("video")) {
+                            String video = pattern_config.getString("src_" + lang);
+                            renderer.setVideo(video, activity);
+                        }
+                    } catch (JSONException e) {
+//                        e.printStackTrace();
+                        Log.i("## ERROR ##", " message -> " + e);
+                    }
                 }
             });
             called_success_detection = true;
             called_failed_detection = false;
-            detected_index = _index;
+            detected_index = index;
         }
 
-        boolean valid_index = detected_index == _index;
+        boolean valid_index = detected_index == index;
 
         if (!getState(_index) && !called_failed_detection && called_success_detection && valid_index) {
             cordova.getThreadPool().execute(new Runnable() {
@@ -914,10 +1000,25 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                     PluginResult result = new PluginResult(PluginResult.Status.ERROR, "{\"message\":\"pattern not detected\"}");
                     result.setKeepCallback(true);
                     cb.sendPluginResult(result);
+
+                    try {
+                        JSONObject pattern_config = patternsConfig.getJSONObject(index + "");
+                        String type =  pattern_config.getString("type");
+                        if(type.equalsIgnoreCase("object")) {
+                            renderer.removeObject();
+                        }
+                        else if(type.equalsIgnoreCase("video")) {
+                            renderer.removeVideo();
+                        }
+                    } catch (JSONException e) {
+//                        e.printStackTrace();
+                        Log.i("## ERROR ##", " message -> " + e);
+                    }
                 }
             });
             called_success_detection = false;
             called_failed_detection = true;
+            stored = false;
         }
     }
 
@@ -932,5 +1033,70 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
         }
 
         return total >= detection_thresh;
+    }
+
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+            renderer.getObjectAt(event.getX(), event.getY());
+        }
+
+        return activity.onTouchEvent(event);
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        float vals[] = event.values;
+
+        float x = vals[0];
+        float y = vals[1];
+        float z = vals[2];
+
+        if(!stored) {
+            old_x = x;
+            old_y = y;
+            old_z = z;
+            stored = true;
+        }
+
+        if(called_success_detection) {
+            double obx, oby, obz = 0;
+
+            double temp_x = Math.abs(Math.abs(x) - Math.abs(old_x));
+            double temp_y = Math.abs(Math.abs(y) - Math.abs(old_y));
+//            double temp_z = Math.abs(Math.abs(z) - Math.abs(old_z));
+
+            obx = temp_x <= 1 ? 0 : 0.01;
+            oby = temp_y <= 1 ? 0 : 0.01;
+//            obz = temp_z <= 1 ? 0 : 0.01;
+
+            if(x < old_x){
+                obx = -obx;
+            }
+            if(y < old_y){
+                oby = -oby;
+            }
+//            if(z < old_z){
+//                obz = -obz;
+//            }
+
+            //Log.i("###### SENSOR ######", "x - " + temp_x + ", y - " + temp_y + ", z - " + temp_z);
+
+            renderer.setCoordinates(obx, oby, obz);
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+
+    }
+
+    private void initialiseSensor() {
+        if (sensor == null)
+            sensor = (SensorManager) activity.getSystemService(Context.SENSOR_SERVICE);
+
+        sensor.registerListener(this,
+                sensor.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
+                SensorManager.SENSOR_DELAY_GAME);
     }
 }

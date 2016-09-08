@@ -57,6 +57,8 @@
       <source-file src="src/android/libs/build-extras.gradle" target-dir="." />
       <source-file src="src/android/libs/opencv-release.aar" target-dir="libs/" />
       <source-file src="src/android/ImageDetectionPlugin.java" target-dir="src/com/cloudoki/imagedetectionplugin/" />
+      <source-file src="src/android/OGLRenderer.java" target-dir="src/com/cloudoki/imagedetectionplugin/" />
+      <source-file src="src/android/res/raw" target-dir="res/" />
     </platform>
 
     <!-- iOS -->

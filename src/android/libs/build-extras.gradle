@@ -1,10 +1,12 @@
 dependencies {
     compile (name: 'opencv-release', ext: 'aar')
+    compile 'org.rajawali3d:rajawali:1.0.186-SNAPSHOT@aar'
 }
 repositories {
     flatDir{
         dirs 'libs'
     }
+    mavenCentral()
 }
 
 ext.postBuildExtras = {
@@ -14,6 +16,11 @@ ext.postBuildExtras = {
             targetCompatibility JavaVersion.VERSION_1_7
         }
         allprojects {
+            repositories {
+                maven {
+                    url "https://oss.sonatype.org/content/repositories/snapshots/"
+                }
+            }
             compileOptions {
                 sourceCompatibility = JavaVersion.VERSION_1_7
                 targetCompatibility = JavaVersion.VERSION_1_7
