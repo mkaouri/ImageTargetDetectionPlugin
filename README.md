@@ -126,3 +126,6 @@ img.src = "img/patterns/target3.jpg";
 
 imgDetectionPlugin.setDetectionTimeout(2, function(success){console.log(success);}, function(error){console.log(error);});
 ```
+
+## Demo Project
+[ImageDetectionDemoApp](https://github.com/a31859/ImageDetectionDemoApp)
