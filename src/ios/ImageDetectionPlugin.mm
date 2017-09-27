@@ -126,7 +126,7 @@ using namespace cv;
         NSNumber* argVal = [command.arguments objectAtIndex:0];
         NSString* msg;
 
-        if (argVal != nil && argVal > 0) {
+        if (argVal != nil && argVal > (void *) 0) {
             timeout = [argVal floatValue];
             ease_time = 0.5;
             timeout_started = [NSDate date];
