@@ -21,6 +21,7 @@ cordova plugin add ../ImageDetectionCordovaPlugin
 ### IOS
 - The plugin aims to be used with iOS version >= 7.
 - **Important!** Go into src/ios folder and extract opencv2.framework from the zip file into the same folder.
+- Since iOS 10, `<key>NSCameraUsageDescription</key>` is required in the project Info.plist of any app that wants to use Camera. To add it, just open the project in XCode, go to the Info tab and add the `NSCameraUsageDescription` key with a string value that explain why your app need an access to the camera.
 
 ### Note
 In *config.xml* add Android and iOS target preference
