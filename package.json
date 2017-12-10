@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Cloudoki/ImageDetectionCordovaPlugin.git"
+    "url": "git+https://github.com/mkaouri/ImageTargetDetectionPlugin.git"
   },
   "keywords": [
     "OpenCV",
@@ -30,7 +30,7 @@
   "author": "Délio Amaral",
   "license": "See License.md for details of the license",
   "bugs": {
-    "url": "https://github.com/Cloudoki/ImageDetectionCordovaPlugin/issues"
+    "url": "https://github.com/mkaouri/ImageTargetDetectionPlugin/issues"
   },
-  "homepage": "https://github.com/Cloudoki/ImageDetectionCordovaPlugin#readme"
+  "homepage": "https://github.com/mkaouri/ImageTargetDetectionPlugin#readme"
 }
